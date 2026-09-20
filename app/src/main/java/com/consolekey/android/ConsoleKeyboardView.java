@@ -4,11 +4,9 @@ import android.content.Context;
 import android.graphics.Canvas;
 import android.graphics.Color;
 import android.graphics.Paint;
-import android.view.InputDevice;
 import android.view.KeyEvent;
 
 import java.util.ArrayList;
-import java.util.Arrays;
 import java.util.List;
 
 public class ConsoleKeyboardView extends BaseKeyboardView {
@@ -60,8 +58,8 @@ public class ConsoleKeyboardView extends BaseKeyboardView {
     @Override protected void onDraw(Canvas c) {
         super.onDraw(c); c.drawColor(Color.rgb(8,8,8));
         String name = family==ControllerDetector.Family.PLAYSTATION ? "PLAYSTATION" : family==ControllerDetector.Family.XBOX ? "XBOX" : "CONTROLE";
-        hint.setTextAlign(Paint.Align.LEFT); c.drawText("🎮 "+name+"  •  D-pad: navegar  •  "+badge("confirm")+": selecionar", dp(12), dp(24), hint);
-        hint.setTextAlign(Paint.Align.RIGHT); c.drawText(badge("delete")+" apagar   "+badge("space")+" espaço   "+badge("done")+" concluir", getWidth()-dp(12), dp(24), hint);
+        hint.setTextAlign(Paint.Align.LEFT); c.drawText("🎮 "+name+"  •  D-pad: navegar  •  "+badge("confirm")+": selecionar", dp(12), dp(20), hint);
+        hint.setTextAlign(Paint.Align.RIGHT); c.drawText(badge("delete")+" apagar   "+badge("space")+" espaço   "+badge("done")+" concluir", getWidth()-dp(12), dp(20), hint);
         layoutRows(headerH, getHeight()-dp(7));
         for(int r=0;r<rows.size();r++) for(int col=0;col<rows.get(r).size();col++) drawKey(c,rows.get(r).get(col),r==selRow&&col==selCol);
     }
@@ -84,13 +82,13 @@ public class ConsoleKeyboardView extends BaseKeyboardView {
             case KeyEvent.KEYCODE_DPAD_CENTER:
                 perform(rows.get(selRow).get(selCol)); return true;
             case KeyEvent.KEYCODE_BUTTON_X:
-                listener.onBackspace(); return true;
+                listener.onKeyFeedback(); flashAction(ACT_BACKSPACE); listener.onBackspace(); return true;
             case KeyEvent.KEYCODE_BUTTON_Y:
-                listener.onSpace(); return true;
+                listener.onKeyFeedback(); flashAction(ACT_SPACE); listener.onSpace(); return true;
             case KeyEvent.KEYCODE_BUTTON_R2:
-                listener.onEnter(); return true;
+                listener.onKeyFeedback(); flashAction(ACT_ENTER); listener.onEnter(); return true;
             case KeyEvent.KEYCODE_BUTTON_B:
-                listener.onHide(); return true;
+                listener.onKeyFeedback(); listener.onHide(); return true;
         }
         return false;
     }

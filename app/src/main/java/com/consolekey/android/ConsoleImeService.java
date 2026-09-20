@@ -1,19 +1,29 @@
 package com.consolekey.android;
 
 import android.content.Context;
+import android.content.Intent;
+import android.content.SharedPreferences;
 import android.content.res.Configuration;
 import android.inputmethodservice.InputMethodService;
 import android.os.Build;
+import android.os.VibrationEffect;
+import android.os.Vibrator;
+import android.os.VibratorManager;
 import android.view.InputDevice;
 import android.view.KeyEvent;
 import android.view.View;
+import android.view.inputmethod.EditorInfo;
 import android.view.inputmethod.InputConnection;
-import android.view.inputmethod.InputMethodManager;
 
 public class ConsoleImeService extends InputMethodService implements InputManagerCompat.Listener, BaseKeyboardView.Listener {
+    public static final String PREFS = "keyboard_prefs";
+    public static final String PREF_PORTRAIT_HEIGHT = "portrait_height";
+    public static final String PREF_LANDSCAPE_HEIGHT = "landscape_height";
+
     private InputManagerCompat inputManager;
     private BaseKeyboardView keyboardView;
     private ControllerDetector.Family activeFamily=ControllerDetector.Family.GENERIC;
+    private int activeControllerId = -1;
 
     @Override public void onCreate() {
         super.onCreate();
@@ -33,6 +43,15 @@ public class ConsoleImeService extends InputMethodService implements InputManage
         return getResources().getConfiguration().orientation == Configuration.ORIENTATION_LANDSCAPE;
     }
 
+    private int preferredHeightDp() {
+        SharedPreferences p = getSharedPreferences(PREFS, MODE_PRIVATE);
+        return p.getInt(landscape() ? PREF_LANDSCAPE_HEIGHT : PREF_PORTRAIT_HEIGHT, landscape() ? 150 : 235);
+    }
+
+    private void applyKeyboardHeight() {
+        if (keyboardView != null) keyboardView.setFixedHeightDp(preferredHeightDp());
+    }
+
     @Override public View onCreateInputView() {
         if(landscape()) {
             ConsoleKeyboardView v=new ConsoleKeyboardView(this,this);
@@ -41,11 +60,14 @@ public class ConsoleImeService extends InputMethodService implements InputManage
         } else {
             keyboardView=new PortraitKeyboardView(this,this);
         }
-        keyboardView.setFixedHeightDp(landscape()?150:235);
+        applyKeyboardHeight();
         return keyboardView;
     }
 
-    private int dp(float v){return Math.round(v*getResources().getDisplayMetrics().density);}
+    @Override public void onStartInputView(EditorInfo info, boolean restarting) {
+        super.onStartInputView(info, restarting);
+        applyKeyboardHeight();
+    }
 
     @Override public void onConfigurationChanged(Configuration newConfig) {
         super.onConfigurationChanged(newConfig);
@@ -54,21 +76,73 @@ public class ConsoleImeService extends InputMethodService implements InputManage
 
     private void refreshController() {
         ControllerDetector.Family found=ControllerDetector.Family.GENERIC;
+        int foundId = -1;
         int[] ids=InputDevice.getDeviceIds();
         for(int id:ids){
             InputDevice d=InputDevice.getDevice(id);
             if(ControllerDetector.isGamepad(d)) {
                 ControllerDetector.Family f=ControllerDetector.detect(d);
-                if(f!=ControllerDetector.Family.GENERIC){found=f;break;}
+                if (foundId == -1) foundId = id;
+                if(f!=ControllerDetector.Family.GENERIC){
+                    found=f;
+                    foundId=id;
+                    break;
+                }
             }
         }
         activeFamily=found;
+        activeControllerId=foundId;
         if(keyboardView instanceof ConsoleKeyboardView) ((ConsoleKeyboardView)keyboardView).setControllerFamily(found);
+    }
+
+    private boolean vibrateGamepad() {
+        if (activeControllerId < 0) return false;
+        InputDevice d = InputDevice.getDevice(activeControllerId);
+        if (!ControllerDetector.isGamepad(d)) return false;
+        try {
+            Vibrator v;
+            if (Build.VERSION.SDK_INT >= 31) {
+                VibratorManager vm = d.getVibratorManager();
+                v = vm.getDefaultVibrator();
+            } else {
+                v = d.getVibrator();
+            }
+            if (v != null && v.hasVibrator()) {
+                v.vibrate(VibrationEffect.createOneShot(24, 115));
+                return true;
+            }
+        } catch (Throwable ignored) {}
+        return false;
+    }
+
+    private void vibratePhone() {
+        try {
+            Vibrator v;
+            if (Build.VERSION.SDK_INT >= 31) {
+                VibratorManager vm = (VibratorManager)getSystemService(Context.VIBRATOR_MANAGER_SERVICE);
+                v = vm == null ? null : vm.getDefaultVibrator();
+            } else {
+                v = (Vibrator)getSystemService(Context.VIBRATOR_SERVICE);
+            }
+            if (v != null && v.hasVibrator()) v.vibrate(VibrationEffect.createOneShot(16, 85));
+        } catch (Throwable ignored) {}
+    }
+
+    @Override public void onKeyFeedback() {
+        if (!vibrateGamepad()) vibratePhone();
+    }
+
+    @Override public void onOpenSettings() {
+        requestHideSelf(0);
+        Intent i = new Intent(this, MainActivity.class);
+        i.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK);
+        startActivity(i);
     }
 
     @Override public boolean onKeyDown(int keyCode, KeyEvent event) {
         InputDevice d=event.getDevice();
         if(ControllerDetector.isGamepad(d)) {
+            activeControllerId = d.getId();
             activeFamily=ControllerDetector.detect(d);
             if(keyboardView instanceof ConsoleKeyboardView) {
                 ConsoleKeyboardView v=(ConsoleKeyboardView)keyboardView;
@@ -84,7 +158,10 @@ public class ConsoleImeService extends InputMethodService implements InputManage
     private InputConnection ic(){return getCurrentInputConnection();}
     @Override public void onText(String text){ if(ic()!=null) ic().commitText(text,1); }
     @Override public void onBackspace(){ if(ic()!=null) ic().deleteSurroundingText(1,0); }
-    @Override public void onEnter(){ if(ic()!=null) ic().sendKeyEvent(new KeyEvent(KeyEvent.ACTION_DOWN,KeyEvent.KEYCODE_ENTER)); if(ic()!=null) ic().sendKeyEvent(new KeyEvent(KeyEvent.ACTION_UP,KeyEvent.KEYCODE_ENTER)); }
+    @Override public void onEnter(){
+        if(ic()!=null) ic().sendKeyEvent(new KeyEvent(KeyEvent.ACTION_DOWN,KeyEvent.KEYCODE_ENTER));
+        if(ic()!=null) ic().sendKeyEvent(new KeyEvent(KeyEvent.ACTION_UP,KeyEvent.KEYCODE_ENTER));
+    }
     @Override public void onSpace(){ onText(" "); }
     @Override public void onHide(){ requestHideSelf(0); }
 }

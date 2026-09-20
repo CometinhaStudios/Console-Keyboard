@@ -18,6 +18,8 @@ public abstract class BaseKeyboardView extends View {
         void onEnter();
         void onSpace();
         void onHide();
+        void onKeyFeedback();
+        void onOpenSettings();
     }
 
     protected static class Key {
@@ -42,6 +44,7 @@ public abstract class BaseKeyboardView extends View {
     protected float gap;
     protected float radius;
     private int forcedHeightPx = 0;
+    private Key pressedKey;
 
     public static final int ACT_TEXT=0, ACT_BACKSPACE=1, ACT_ENTER=2, ACT_SPACE=3, ACT_SHIFT=4, ACT_SYMBOLS=5, ACT_HIDE=6;
 
@@ -72,7 +75,8 @@ public abstract class BaseKeyboardView extends View {
         int height = forcedHeightPx > 0 ? forcedHeightPx : getSuggestedMinimumHeight();
         if (height <= 0) height = View.MeasureSpec.getSize(heightMeasureSpec);
         int maxHeight = View.MeasureSpec.getSize(heightMeasureSpec);
-        if (View.MeasureSpec.getMode(heightMeasureSpec) == View.MeasureSpec.AT_MOST && maxHeight > 0) {
+        int mode = View.MeasureSpec.getMode(heightMeasureSpec);
+        if ((mode == View.MeasureSpec.AT_MOST || mode == View.MeasureSpec.EXACTLY) && maxHeight > 0) {
             height = Math.min(height, maxHeight);
         }
         setMeasuredDimension(width, height);
@@ -81,8 +85,33 @@ public abstract class BaseKeyboardView extends View {
     protected Key k(String label) { return new Key(label, label, 1f, ACT_TEXT); }
     protected Key k(String label, String value, float weight, int action) { return new Key(label, value, weight, action); }
 
+    protected void flashKey(Key key) {
+        if (key == null) return;
+        pressedKey = key;
+        invalidate();
+        postDelayed(() -> {
+            if (pressedKey == key) {
+                pressedKey = null;
+                invalidate();
+            }
+        }, 95);
+    }
+
+    protected void flashAction(int action) {
+        for (List<Key> row : rows) {
+            for (Key key : row) {
+                if (key.action == action) {
+                    flashKey(key);
+                    return;
+                }
+            }
+        }
+    }
+
     protected void perform(Key key) {
         if (key == null || listener == null) return;
+        listener.onKeyFeedback();
+        flashKey(key);
         switch (key.action) {
             case ACT_BACKSPACE: listener.onBackspace(); break;
             case ACT_ENTER: listener.onEnter(); break;
@@ -111,9 +140,11 @@ public abstract class BaseKeyboardView extends View {
     }
 
     protected void drawKey(Canvas c, Key key, boolean selected) {
-        fill.setColor(selected ? Color.rgb(52,52,52) : Color.rgb(16,16,16));
+        boolean pressed = key == pressedKey;
+        int bg = pressed ? Color.rgb(78,78,78) : selected ? Color.rgb(52,52,52) : Color.rgb(16,16,16);
+        fill.setColor(bg);
         c.drawRoundRect(key.rect, radius, radius, fill);
-        if (selected) c.drawRoundRect(key.rect, radius, radius, accent);
+        if (selected && !pressed) c.drawRoundRect(key.rect, radius, radius, accent);
         float size = Math.min(dp(28), key.rect.height() * 0.40f);
         text.setTextSize(size);
         Paint.FontMetrics fm = text.getFontMetrics();
@@ -127,9 +158,32 @@ public abstract class BaseKeyboardView extends View {
     }
 
     @Override public boolean onTouchEvent(MotionEvent e) {
-        if (e.getAction() == MotionEvent.ACTION_UP) {
-            Key key = hit(e.getX(), e.getY());
-            if (key != null) { perform(key); invalidate(); }
+        switch (e.getActionMasked()) {
+            case MotionEvent.ACTION_DOWN:
+                pressedKey = hit(e.getX(), e.getY());
+                invalidate();
+                return true;
+            case MotionEvent.ACTION_MOVE:
+                Key moved = hit(e.getX(), e.getY());
+                if (moved != pressedKey) {
+                    pressedKey = moved;
+                    invalidate();
+                }
+                return true;
+            case MotionEvent.ACTION_UP:
+                Key key = hit(e.getX(), e.getY());
+                Key wasPressed = pressedKey;
+                if (key != null && key == wasPressed) {
+                    perform(key);
+                } else {
+                    pressedKey = null;
+                    invalidate();
+                }
+                return true;
+            case MotionEvent.ACTION_CANCEL:
+                pressedKey = null;
+                invalidate();
+                return true;
         }
         return true;
     }
