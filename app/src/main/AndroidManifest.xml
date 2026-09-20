@@ -1,12 +1,15 @@
 <?xml version="1.0" encoding="utf-8"?>
 <manifest xmlns:android="http://schemas.android.com/apk/res/android">
+
     <application
         android:allowBackup="true"
-        android:label="Console Keyboard"
-        android:theme="@style/AppTheme">
+        android:label="@string/app_name"
+        android:theme="@style/AppTheme"
+        android:directBootAware="true"
+        android:defaultToDeviceProtectedStorage="true">
 
         <activity
-            android:name=".MainActivity"
+            android:name="com.consolekey.android.MainActivity"
             android:exported="true">
             <intent-filter>
                 <action android:name="android.intent.action.MAIN" />
@@ -15,16 +18,20 @@
         </activity>
 
         <service
-            android:name=".ConsoleImeService"
+            android:name="com.consolekey.android.ConsoleImeService"
+            android:enabled="true"
             android:exported="true"
-            android:label="Console Keyboard"
+            android:directBootAware="true"
+            android:label="@string/ime_name"
             android:permission="android.permission.BIND_INPUT_METHOD">
             <intent-filter>
                 <action android:name="android.view.InputMethod" />
             </intent-filter>
+
             <meta-data
                 android:name="android.view.im"
                 android:resource="@xml/method" />
         </service>
+
     </application>
 </manifest>
