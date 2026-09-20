@@ -41,6 +41,7 @@ public abstract class BaseKeyboardView extends View {
     protected Listener listener;
     protected float gap;
     protected float radius;
+    private int forcedHeightPx = 0;
 
     public static final int ACT_TEXT=0, ACT_BACKSPACE=1, ACT_ENTER=2, ACT_SPACE=3, ACT_SHIFT=4, ACT_SYMBOLS=5, ACT_HIDE=6;
 
