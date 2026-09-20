@@ -7,6 +7,9 @@ import android.graphics.Color;
 import android.graphics.Paint;
 import android.graphics.RectF;
 import android.view.MotionEvent;
+import android.view.VelocityTracker;
+import android.view.ViewConfiguration;
+import android.widget.OverScroller;
 
 import java.util.ArrayList;
 import java.util.List;
@@ -34,6 +37,17 @@ public class PortraitKeyboardView extends BaseKeyboardView {
     private float toolbarH;
     private float emojiModeBarH;
     private float emojiCategoryBarH;
+
+    private final OverScroller emojiScroller;
+    private VelocityTracker emojiVelocity;
+    private final int emojiTouchSlop;
+    private float emojiScrollY = 0f;
+    private float emojiMaxScroll = 0f;
+    private float emojiLastY = 0f;
+    private float emojiDownY = 0f;
+    private boolean emojiScrolling = false;
+
+    private final Paint emojiScrollBarPaint = new Paint(Paint.ANTI_ALIAS_FLAG);
 
     private final String[] emojiModeIcons = {"⌨","🙂",":-)","GIF","▣","◉","+"};
     private final String[] emojiCategoryIcons = {"⌕","◷","☺","👤","🐾","🍴","⚽","✈","💡","!?","⚑"};
@@ -69,6 +83,11 @@ public class PortraitKeyboardView extends BaseKeyboardView {
 
         dividerPaint.setColor(Color.rgb(38,38,38));
         dividerPaint.setStrokeWidth(dp(1));
+
+        emojiScrollBarPaint.setColor(Color.rgb(115,115,115));
+
+        emojiScroller = new OverScroller(c);
+        emojiTouchSlop = ViewConfiguration.get(c).getScaledTouchSlop();
 
         rebuild();
     }
@@ -161,7 +180,7 @@ public class PortraitKeyboardView extends BaseKeyboardView {
         recents.remove(emoji);
         recents.add(0, emoji);
 
-        while (recents.size() > 32) {
+        while (recents.size() > 48) {
             recents.remove(recents.size() - 1);
         }
 
@@ -196,12 +215,11 @@ public class PortraitKeyboardView extends BaseKeyboardView {
         String[] items = currentEmojiItems();
 
         int columns = 8;
-        int limit = Math.min(items.length, 32);
 
-        for (int start = 0; start < limit; start += columns) {
+        for (int start = 0; start < items.length; start += columns) {
             List<Key> r = new ArrayList<>();
 
-            for (int i=start; i<Math.min(start + columns, limit); i++) {
+            for (int i=start; i<Math.min(start + columns, items.length); i++) {
                 r.add(emojiKey(items[i]));
             }
 
@@ -371,10 +389,14 @@ public class PortraitKeyboardView extends BaseKeyboardView {
     }
 
     private void layoutEmojiGrid(float top, float bottom) {
+        float viewportH = Math.max(1f, bottom - top);
+        float rowH = dp(48);
+
+        emojiMaxScroll = Math.max(0f, rows.size() * rowH - viewportH);
+        emojiScrollY = Math.max(0f, Math.min(emojiScrollY, emojiMaxScroll));
+
         if (rows.isEmpty()) return;
 
-        int maxRows = Math.max(1, rows.size());
-        float rowH = (bottom - top) / maxRows;
         float left = dp(12);
         float right = getWidth() - dp(12);
         float totalW = right - left;
@@ -385,7 +407,7 @@ public class PortraitKeyboardView extends BaseKeyboardView {
 
             for (int col=0; col<row.size(); col++) {
                 float l = left + col * cellW;
-                float t = top + r * rowH;
+                float t = top + r * rowH - emojiScrollY;
 
                 row.get(col).rect.set(
                         l,
@@ -395,6 +417,55 @@ public class PortraitKeyboardView extends BaseKeyboardView {
                 );
             }
         }
+    }
+
+    private void stopEmojiFling() {
+        if (!emojiScroller.isFinished()) {
+            emojiScroller.forceFinished(true);
+        }
+    }
+
+    private void resetEmojiScroll() {
+        stopEmojiFling();
+        emojiScrollY = 0f;
+        emojiMaxScroll = 0f;
+        invalidate();
+    }
+
+    private void scrollEmojiBy(float deltaY) {
+        emojiScrollY = Math.max(0f, Math.min(emojiMaxScroll, emojiScrollY + deltaY));
+        invalidate();
+    }
+
+    private void flingEmoji(float velocityY) {
+        if (emojiMaxScroll <= 0f) return;
+
+        emojiScroller.fling(
+                0,
+                Math.round(emojiScrollY),
+                0,
+                Math.round(-velocityY),
+                0,
+                0,
+                0,
+                Math.round(emojiMaxScroll)
+        );
+
+        postInvalidateOnAnimation();
+    }
+
+    private void recycleEmojiVelocity() {
+        if (emojiVelocity != null) {
+            emojiVelocity.recycle();
+            emojiVelocity = null;
+        }
+    }
+
+    private void cancelBasePress(MotionEvent source) {
+        MotionEvent cancel = MotionEvent.obtain(source);
+        cancel.setAction(MotionEvent.ACTION_CANCEL);
+        super.onTouchEvent(cancel);
+        cancel.recycle();
     }
 
     private void drawEmojiModeBar(Canvas c) {
@@ -484,10 +555,15 @@ public class PortraitKeyboardView extends BaseKeyboardView {
             return;
         }
 
+        int save = c.save();
+        c.clipRect(0, top, getWidth(), bottom);
+
         text.setTextAlign(Paint.Align.CENTER);
 
         for (List<Key> row : rows) {
             for (Key key : row) {
+                if (key.rect.bottom < top || key.rect.top > bottom) continue;
+
                 float size = Math.min(dp(30), key.rect.height() * 0.62f);
                 text.setTextSize(size);
                 text.setColor(Color.WHITE);
@@ -500,6 +576,26 @@ public class PortraitKeyboardView extends BaseKeyboardView {
         }
 
         drawLongPressPopup(c);
+        c.restoreToCount(save);
+
+        if (emojiMaxScroll > 0f) {
+            float viewportH = bottom - top;
+            float contentH = viewportH + emojiMaxScroll;
+            float thumbH = Math.max(dp(24), viewportH * viewportH / contentH);
+            float track = viewportH - thumbH;
+            float fraction = emojiScrollY / emojiMaxScroll;
+            float thumbTop = top + track * fraction;
+
+            c.drawRoundRect(
+                    getWidth() - dp(3.5f),
+                    thumbTop,
+                    getWidth() - dp(1.5f),
+                    thumbTop + thumbH,
+                    dp(2),
+                    dp(2),
+                    emojiScrollBarPaint
+            );
+        }
     }
 
     private void drawEmojiPanel(Canvas c) {
@@ -558,6 +654,7 @@ public class PortraitKeyboardView extends BaseKeyboardView {
                 emojiCategory = index;
             }
 
+            resetEmojiScroll();
             rebuildEmoji();
             return true;
         }
@@ -575,6 +672,7 @@ public class PortraitKeyboardView extends BaseKeyboardView {
             if (i == 0) {
                 emojiMode = true;
                 emojiCategory = 2;
+                resetEmojiScroll();
                 rebuildEmoji();
             } else if (i == 3) {
                 listener.onOpenSettings();
@@ -583,10 +681,92 @@ public class PortraitKeyboardView extends BaseKeyboardView {
             return true;
         }
 
-        if (handleEmojiBars(e)) {
+        if (!emojiMode) {
+            return super.onTouchEvent(e);
+        }
+
+        float barsBottom = emojiModeBarH + emojiCategoryBarH;
+
+        if (e.getActionMasked() == MotionEvent.ACTION_DOWN && e.getY() < barsBottom) {
             return true;
         }
 
-        return super.onTouchEvent(e);
+        if (e.getActionMasked() == MotionEvent.ACTION_UP &&
+                emojiVelocity == null &&
+                e.getY() < barsBottom) {
+            if (handleEmojiBars(e)) return true;
+            return true;
+        }
+
+        switch (e.getActionMasked()) {
+            case MotionEvent.ACTION_DOWN:
+                stopEmojiFling();
+                recycleEmojiVelocity();
+                emojiVelocity = VelocityTracker.obtain();
+                emojiVelocity.addMovement(e);
+                emojiLastY = e.getY();
+                emojiDownY = e.getY();
+                emojiScrolling = false;
+                return super.onTouchEvent(e);
+
+            case MotionEvent.ACTION_MOVE:
+                if (emojiVelocity != null) emojiVelocity.addMovement(e);
+
+                if (isLongPressPopupOpen()) {
+                    return super.onTouchEvent(e);
+                }
+
+                if (!emojiScrolling && Math.abs(e.getY() - emojiDownY) > emojiTouchSlop) {
+                    emojiScrolling = true;
+                    cancelBasePress(e);
+                }
+
+                if (emojiScrolling) {
+                    float delta = emojiLastY - e.getY();
+                    emojiLastY = e.getY();
+                    scrollEmojiBy(delta);
+                    return true;
+                }
+
+                emojiLastY = e.getY();
+                return super.onTouchEvent(e);
+
+            case MotionEvent.ACTION_UP:
+                if (emojiVelocity != null) emojiVelocity.addMovement(e);
+
+                if (emojiScrolling) {
+                    if (emojiVelocity != null) {
+                        emojiVelocity.computeCurrentVelocity(1000);
+                        flingEmoji(emojiVelocity.getYVelocity());
+                    }
+
+                    recycleEmojiVelocity();
+                    emojiScrolling = false;
+                    return true;
+                }
+
+                recycleEmojiVelocity();
+                return super.onTouchEvent(e);
+
+            case MotionEvent.ACTION_CANCEL:
+                recycleEmojiVelocity();
+                emojiScrolling = false;
+                return super.onTouchEvent(e);
+        }
+
+        return true;
+    }
+
+    @Override public void computeScroll() {
+        super.computeScroll();
+
+        if (emojiMode && emojiScroller.computeScrollOffset()) {
+            emojiScrollY = Math.max(
+                    0f,
+                    Math.min(emojiMaxScroll, emojiScroller.getCurrY())
+            );
+
+            postInvalidateOnAnimation();
+        }
     }
 }
