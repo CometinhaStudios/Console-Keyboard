@@ -24,47 +24,87 @@ public class MainActivity extends Activity {
 
     private Button button(String text) {
         Button b = new Button(this);
+
         b.setText(text);
         b.setTextSize(16);
         b.setAllCaps(false);
         b.setTextColor(Color.WHITE);
         b.setBackgroundColor(Color.rgb(25,25,25));
+
         LinearLayout.LayoutParams p = new LinearLayout.LayoutParams(-1, dp(54));
         p.setMargins(0, dp(7), 0, dp(7));
+
         b.setLayoutParams(p);
         return b;
     }
 
-    private void addSizeControl(LinearLayout root, String title, String prefKey, int defaultValue, int min, int max) {
+    private void addControl(
+            LinearLayout root,
+            String title,
+            String prefKey,
+            int defaultValue,
+            int min,
+            int max,
+            String unit
+    ) {
         TextView label = new TextView(this);
         label.setTextColor(Color.WHITE);
         label.setTextSize(16);
         label.setPadding(0, dp(14), 0, dp(4));
+
         root.addView(label, new LinearLayout.LayoutParams(-1, -2));
 
         SeekBar seek = new SeekBar(this);
         seek.setMax(max - min);
+
         int current = Math.max(min, Math.min(max, prefs.getInt(prefKey, defaultValue)));
         seek.setProgress(current - min);
-        label.setText(title + ": " + current + " dp");
+
+        label.setText(title + ": " + current + " " + unit);
         root.addView(seek, new LinearLayout.LayoutParams(-1, dp(48)));
 
         seek.setOnSeekBarChangeListener(new SeekBar.OnSeekBarChangeListener() {
             @Override public void onProgressChanged(SeekBar seekBar, int progress, boolean fromUser) {
                 int value = min + progress;
-                label.setText(title + ": " + value + " dp");
-                if (fromUser) prefs.edit().putInt(prefKey, value).apply();
+                label.setText(title + ": " + value + " " + unit);
+
+                if (fromUser) {
+                    prefs.edit().putInt(prefKey, value).apply();
+                }
             }
+
             @Override public void onStartTrackingTouch(SeekBar seekBar) {}
             @Override public void onStopTrackingTouch(SeekBar seekBar) {}
         });
     }
 
-    @Override
-    protected void onCreate(Bundle savedInstanceState) {
+    private TextView sectionTitle(String text) {
+        TextView v = new TextView(this);
+
+        v.setText(text);
+        v.setTextColor(Color.WHITE);
+        v.setTextSize(21);
+        v.setPadding(0, dp(22), 0, dp(2));
+
+        return v;
+    }
+
+    private TextView help(String text) {
+        TextView v = new TextView(this);
+
+        v.setText(text);
+        v.setTextColor(Color.GRAY);
+        v.setTextSize(13);
+
+        return v;
+    }
+
+    @Override protected void onCreate(Bundle savedInstanceState) {
         super.onCreate(savedInstanceState);
+
         getWindow().setStatusBarColor(Color.BLACK);
         getWindow().setNavigationBarColor(Color.BLACK);
+
         prefs = getSharedPreferences(ConsoleImeService.PREFS, MODE_PRIVATE);
 
         ScrollView scroll = new ScrollView(this);
@@ -76,6 +116,7 @@ public class MainActivity extends Activity {
         root.setGravity(Gravity.CENTER_HORIZONTAL);
         root.setPadding(dp(24), dp(28), dp(24), dp(28));
         root.setBackgroundColor(Color.BLACK);
+
         scroll.addView(root, new ScrollView.LayoutParams(-1, -2));
 
         TextView title = new TextView(this);
@@ -83,59 +124,99 @@ public class MainActivity extends Activity {
         title.setTextColor(Color.WHITE);
         title.setTextSize(29);
         title.setGravity(Gravity.CENTER);
+
         root.addView(title, new LinearLayout.LayoutParams(-1, -2));
 
         TextView sub = new TextView(this);
-        sub.setText("v0.1.4\n\nRetrato: teclado normal + emoji.\nPaisagem: modo console por toque + controle.\nXbox/PlayStation detectados automaticamente.");
+        sub.setText(
+                "v0.1.5\n\n" +
+                "Retrato: teclado normal + emoji + long press.\n" +
+                "Paisagem: console por toque + controle.\n" +
+                "Xbox/PlayStation detectados automaticamente."
+        );
         sub.setTextColor(Color.LTGRAY);
         sub.setTextSize(15);
         sub.setGravity(Gravity.CENTER);
         sub.setPadding(0, dp(14), 0, dp(16));
+
         root.addView(sub, new LinearLayout.LayoutParams(-1, -2));
 
         Button enable = button("1. Ativar teclado no Android");
-        enable.setOnClickListener(v -> startActivity(new Intent(Settings.ACTION_INPUT_METHOD_SETTINGS)));
+        enable.setOnClickListener(v ->
+                startActivity(new Intent(Settings.ACTION_INPUT_METHOD_SETTINGS))
+        );
         root.addView(enable);
 
         Button choose = button("2. Selecionar Console Keyboard");
         choose.setOnClickListener(v -> {
-            InputMethodManager imm = (InputMethodManager) getSystemService(Context.INPUT_METHOD_SERVICE);
+            InputMethodManager imm =
+                    (InputMethodManager)getSystemService(Context.INPUT_METHOD_SERVICE);
+
             imm.showInputMethodPicker();
         });
         root.addView(choose);
 
-        TextView section = new TextView(this);
-        section.setText("Tamanho do teclado");
-        section.setTextColor(Color.WHITE);
-        section.setTextSize(21);
-        section.setPadding(0, dp(22), 0, dp(2));
-        root.addView(section, new LinearLayout.LayoutParams(-1, -2));
+        root.addView(sectionTitle("Tamanho do teclado"));
+        root.addView(help(
+                "Retrato e paisagem ficam separados. Feche e abra o teclado para aplicar a nova altura."
+        ));
 
-        TextView explain = new TextView(this);
-        explain.setText("Ajuste separado para retrato e paisagem. Feche e abra o teclado novamente para aplicar.");
-        explain.setTextColor(Color.GRAY);
-        explain.setTextSize(13);
-        root.addView(explain, new LinearLayout.LayoutParams(-1, -2));
+        addControl(
+                root,
+                "Retrato",
+                ConsoleImeService.PREF_PORTRAIT_HEIGHT,
+                235,
+                180,
+                340,
+                "dp"
+        );
 
-        addSizeControl(root, "Retrato", ConsoleImeService.PREF_PORTRAIT_HEIGHT, 235, 180, 340);
-        addSizeControl(root, "Paisagem", ConsoleImeService.PREF_LANDSCAPE_HEIGHT, 150, 105, 240);
+        addControl(
+                root,
+                "Paisagem",
+                ConsoleImeService.PREF_LANDSCAPE_HEIGHT,
+                150,
+                105,
+                240,
+                "dp"
+        );
 
-        Button reset = button("Restaurar tamanhos padrão");
+        root.addView(sectionTitle("Toque e segurar"));
+        root.addView(help(
+                "Controla quanto tempo precisa segurar uma tecla antes de aparecerem ç, acentos e símbolos extras."
+        ));
+
+        addControl(
+                root,
+                "Atraso",
+                ConsoleImeService.PREF_LONG_PRESS_DELAY,
+                420,
+                200,
+                700,
+                "ms"
+        );
+
+        Button reset = button("Restaurar padrões");
         reset.setOnClickListener(v -> {
             prefs.edit()
                     .putInt(ConsoleImeService.PREF_PORTRAIT_HEIGHT, 235)
                     .putInt(ConsoleImeService.PREF_LANDSCAPE_HEIGHT, 150)
+                    .putInt(ConsoleImeService.PREF_LONG_PRESS_DELAY, 420)
                     .apply();
+
             recreate();
         });
+
         root.addView(reset);
 
-        TextView info = new TextView(this);
-        info.setText("Vibração: com gamepad compatível, o retorno tenta ir para o controle. Se o controle não expuser vibração ao Android, o celular vibra como fallback.");
-        info.setTextColor(Color.GRAY);
-        info.setTextSize(13);
+        TextView info = help(
+                "Segure C para Ç; A/E/I/O/U para acentos; números e pontuação também têm atalhos. " +
+                "No modo console, segure A/✕ em uma letra e use o D-pad para escolher a alternativa. " +
+                "Backspace segurado repete a exclusão."
+        );
         info.setGravity(Gravity.CENTER);
         info.setPadding(0, dp(18), 0, 0);
+
         root.addView(info, new LinearLayout.LayoutParams(-1, -2));
 
         setContentView(scroll);
