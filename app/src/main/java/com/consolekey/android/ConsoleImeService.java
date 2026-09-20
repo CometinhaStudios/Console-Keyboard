@@ -27,6 +27,8 @@ public class ConsoleImeService extends InputMethodService implements InputManage
         super.onDestroy();
     }
 
+    @Override public boolean onEvaluateFullscreenMode() { return false; }
+
     private boolean landscape() {
         return getResources().getConfiguration().orientation == Configuration.ORIENTATION_LANDSCAPE;
     }
@@ -39,7 +41,7 @@ public class ConsoleImeService extends InputMethodService implements InputManage
         } else {
             keyboardView=new PortraitKeyboardView(this,this);
         }
-        keyboardView.setMinimumHeight(landscape()?dp(260):dp(420));
+        keyboardView.setMinimumHeight(landscape()?dp(210):dp(312));
         return keyboardView;
     }
 

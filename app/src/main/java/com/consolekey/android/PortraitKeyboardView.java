@@ -18,11 +18,11 @@ public class PortraitKeyboardView extends BaseKeyboardView {
 
     public PortraitKeyboardView(Context c, Listener l) {
         super(c,l);
-        setPadding((int)dp(8),(int)dp(8),(int)dp(8),(int)dp(8));
-        toolbarH = dp(54);
+        setPadding((int)dp(6),(int)dp(6),(int)dp(6),(int)dp(6));
+        toolbarH = dp(40);
         toolbar.setColor(Color.WHITE);
         toolbar.setTextAlign(Paint.Align.CENTER);
-        toolbar.setTextSize(dp(23));
+        toolbar.setTextSize(dp(18));
         rebuild();
     }
 
@@ -94,7 +94,7 @@ public class PortraitKeyboardView extends BaseKeyboardView {
         String[] icons={"☺","A↔","▣","⚙","•••"};
         float segment=getWidth()/(float)icons.length;
         for (int i=0;i<icons.length;i++) c.drawText(icons[i], segment*(i+.5f), dp(34), toolbar);
-        layoutRows(toolbarH+dp(8), getHeight()-dp(8));
+        layoutRows(toolbarH+dp(6), getHeight()-dp(6));
         for (List<Key> row: rows) for (Key key: row) {
             String old=key.label;
             if (page==0 && upper && old.length()==1 && Character.isLetter(old.charAt(0))) key.label=old.toUpperCase();

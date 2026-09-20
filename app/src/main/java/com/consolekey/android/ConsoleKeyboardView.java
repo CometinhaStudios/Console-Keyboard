@@ -19,9 +19,9 @@ public class ConsoleKeyboardView extends BaseKeyboardView {
 
     public ConsoleKeyboardView(Context c, Listener l) {
         super(c,l);
-        setPadding((int)dp(10),(int)dp(8),(int)dp(10),(int)dp(8));
-        gap=dp(5); radius=dp(4); headerH=dp(42);
-        hint.setColor(Color.LTGRAY); hint.setTextSize(dp(13)); hint.setTextAlign(Paint.Align.LEFT);
+        setPadding((int)dp(8),(int)dp(6),(int)dp(8),(int)dp(6));
+        gap=dp(4); radius=dp(6); headerH=dp(28);
+        hint.setColor(Color.LTGRAY); hint.setTextSize(dp(11)); hint.setTextAlign(Paint.Align.LEFT);
         build();
     }
 
