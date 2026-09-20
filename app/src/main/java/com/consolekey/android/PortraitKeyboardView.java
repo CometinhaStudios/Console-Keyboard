@@ -203,10 +203,10 @@ public class PortraitKeyboardView extends BaseKeyboardView {
         }
 
         if (emojiCategory >= 2 && emojiCategory <= 10) {
-            return EmojiData.category(emojiCategory - 2);
+            return EmojiData.category(getContext(), emojiCategory - 2);
         }
 
-        return EmojiData.category(0);
+        return EmojiData.category(getContext(), 0);
     }
 
     private void rebuildEmoji() {
