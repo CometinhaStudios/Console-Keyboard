@@ -41,7 +41,7 @@ public class ConsoleImeService extends InputMethodService implements InputManage
         } else {
             keyboardView=new PortraitKeyboardView(this,this);
         }
-        keyboardView.setMinimumHeight(landscape()?dp(210):dp(312));
+        keyboardView.setFixedHeightDp(landscape()?150:235);
         return keyboardView;
     }
 

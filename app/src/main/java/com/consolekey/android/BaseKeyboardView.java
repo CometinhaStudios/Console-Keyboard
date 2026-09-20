@@ -61,6 +61,22 @@ public abstract class BaseKeyboardView extends View {
 
     protected float dp(float v) { return v * getResources().getDisplayMetrics().density; }
 
+    public void setFixedHeightDp(float heightDp) {
+        forcedHeightPx = Math.round(dp(heightDp));
+        requestLayout();
+    }
+
+    @Override protected void onMeasure(int widthMeasureSpec, int heightMeasureSpec) {
+        int width = View.MeasureSpec.getSize(widthMeasureSpec);
+        int height = forcedHeightPx > 0 ? forcedHeightPx : getSuggestedMinimumHeight();
+        if (height <= 0) height = View.MeasureSpec.getSize(heightMeasureSpec);
+        int maxHeight = View.MeasureSpec.getSize(heightMeasureSpec);
+        if (View.MeasureSpec.getMode(heightMeasureSpec) == View.MeasureSpec.AT_MOST && maxHeight > 0) {
+            height = Math.min(height, maxHeight);
+        }
+        setMeasuredDimension(width, height);
+    }
+
     protected Key k(String label) { return new Key(label, label, 1f, ACT_TEXT); }
     protected Key k(String label, String value, float weight, int action) { return new Key(label, value, weight, action); }
 
