@@ -29,7 +29,7 @@ public class ConsoleKeyboardView extends BaseKeyboardView {
         rows.clear();
         rows.add(row("1","2","3","4","5","6","7","8","9","0"));
         rows.add(row("q","w","e","r","t","y","u","i","o","p"));
-        rows.add(row("a","s","d","f","g","h","j","k","l","ç"));
+        rows.add(row("a","s","d","f","g","h","j","k","l"));
         rows.add(row("z","x","c","v","b","n","m",",",".","?"));
         List<Key> bottom=new ArrayList<>();
         bottom.add(k("⇧",null,1.0f,ACT_SHIFT));

@@ -39,12 +39,28 @@ public abstract class BaseKeyboardView extends View {
     protected final Paint fill = new Paint(Paint.ANTI_ALIAS_FLAG);
     protected final Paint text = new Paint(Paint.ANTI_ALIAS_FLAG);
     protected final Paint accent = new Paint(Paint.ANTI_ALIAS_FLAG);
+    private final Paint altHint = new Paint(Paint.ANTI_ALIAS_FLAG);
+    private final Paint popupFill = new Paint(Paint.ANTI_ALIAS_FLAG);
+    private final Paint popupSelectedFill = new Paint(Paint.ANTI_ALIAS_FLAG);
+    private final Paint popupText = new Paint(Paint.ANTI_ALIAS_FLAG);
     protected final List<List<Key>> rows = new ArrayList<>();
     protected Listener listener;
     protected float gap;
     protected float radius;
     private int forcedHeightPx = 0;
+
     private Key pressedKey;
+    private Key downKey;
+    private Key popupKey;
+    private String[] popupOptions;
+    private int popupSelected = 0;
+    private boolean longPressActive = false;
+    private boolean repeatingBackspace = false;
+    private final RectF popupRect = new RectF();
+
+    private static final long LONG_PRESS_MS = 360;
+    private static final long BACKSPACE_REPEAT_START_MS = 430;
+    private static final long BACKSPACE_REPEAT_MS = 68;
 
     public static final int ACT_TEXT=0, ACT_BACKSPACE=1, ACT_ENTER=2, ACT_SPACE=3, ACT_SHIFT=4, ACT_SYMBOLS=5, ACT_HIDE=6;
 
@@ -59,6 +75,17 @@ public abstract class BaseKeyboardView extends View {
         accent.setStyle(Paint.Style.STROKE);
         accent.setStrokeWidth(dp(2));
         accent.setColor(Color.WHITE);
+
+        altHint.setColor(Color.rgb(150,150,150));
+        altHint.setTextAlign(Paint.Align.RIGHT);
+        altHint.setTextSize(dp(9));
+
+        popupFill.setColor(Color.rgb(42,42,42));
+        popupSelectedFill.setColor(Color.rgb(92,92,92));
+        popupText.setColor(Color.WHITE);
+        popupText.setTextAlign(Paint.Align.CENTER);
+        popupText.setTextSize(dp(20));
+
         setFocusable(true);
         setFocusableInTouchMode(true);
     }
@@ -85,12 +112,95 @@ public abstract class BaseKeyboardView extends View {
     protected Key k(String label) { return new Key(label, label, 1f, ACT_TEXT); }
     protected Key k(String label, String value, float weight, int action) { return new Key(label, value, weight, action); }
 
+    protected String[] getLongPressAlternatives(Key key) {
+        if (key == null || key.action != ACT_TEXT || key.value == null) return null;
+        String s = key.value.toLowerCase();
+        switch (s) {
+            case "a": return new String[]{"á","à","â","ã","ä"};
+            case "e": return new String[]{"é","ê","è","ë"};
+            case "i": return new String[]{"í","î","ì","ï"};
+            case "o": return new String[]{"ó","ô","õ","ò","ö"};
+            case "u": return new String[]{"ú","ü","û","ù"};
+            case "c": return new String[]{"ç"};
+            case "n": return new String[]{"ñ"};
+            case "y": return new String[]{"ý","ÿ"};
+            case "1": return new String[]{"!","¹"};
+            case "2": return new String[]{"@","²"};
+            case "3": return new String[]{"#","³"};
+            case "4": return new String[]{"$","€","£"};
+            case "5": return new String[]{"%"};
+            case "6": return new String[]{"^"};
+            case "7": return new String[]{"&"};
+            case "8": return new String[]{"*"};
+            case "9": return new String[]{"("};
+            case "0": return new String[]{")"};
+            case ".": return new String[]{"…","?","!",":",";"};
+            case ",": return new String[]{";",":"};
+            case "?": return new String[]{"¿"};
+            case "!": return new String[]{"¡"};
+            case "-": return new String[]{"—","–","_"};
+            default: return null;
+        }
+    }
+
+    protected String transformLongPressOutput(Key key, String option) {
+        return option;
+    }
+
+    protected void onLongPressCommitted(Key key, String output) {
+    }
+
+    private final Runnable longPressRunnable = new Runnable() {
+        @Override public void run() {
+            if (downKey == null || pressedKey != downKey) return;
+            String[] options = getLongPressAlternatives(downKey);
+            if (options == null || options.length == 0) return;
+            popupKey = downKey;
+            popupOptions = options;
+            popupSelected = 0;
+            longPressActive = true;
+            if (listener != null) listener.onKeyFeedback();
+            invalidate();
+        }
+    };
+
+    private final Runnable repeatBackspaceRunnable = new Runnable() {
+        @Override public void run() {
+            if (downKey == null || downKey.action != ACT_BACKSPACE || listener == null) return;
+            repeatingBackspace = true;
+            listener.onKeyFeedback();
+            listener.onBackspace();
+            pressedKey = downKey;
+            invalidate();
+            postDelayed(this, BACKSPACE_REPEAT_MS);
+        }
+    };
+
+    private void scheduleHoldAction(Key key) {
+        removeCallbacks(longPressRunnable);
+        removeCallbacks(repeatBackspaceRunnable);
+        if (key == null) return;
+        if (key.action == ACT_BACKSPACE) {
+            postDelayed(repeatBackspaceRunnable, BACKSPACE_REPEAT_START_MS);
+            return;
+        }
+        String[] alternatives = getLongPressAlternatives(key);
+        if (alternatives != null && alternatives.length > 0) {
+            postDelayed(longPressRunnable, LONG_PRESS_MS);
+        }
+    }
+
+    private void stopHoldActions() {
+        removeCallbacks(longPressRunnable);
+        removeCallbacks(repeatBackspaceRunnable);
+    }
+
     protected void flashKey(Key key) {
         if (key == null) return;
         pressedKey = key;
         invalidate();
         postDelayed(() -> {
-            if (pressedKey == key) {
+            if (pressedKey == key && downKey == null) {
                 pressedKey = null;
                 invalidate();
             }
@@ -150,6 +260,12 @@ public abstract class BaseKeyboardView extends View {
         Paint.FontMetrics fm = text.getFontMetrics();
         float cy = key.rect.centerY() - (fm.ascent + fm.descent) / 2f;
         c.drawText(key.label, key.rect.centerX(), cy, text);
+
+        String[] alts = getLongPressAlternatives(key);
+        if (alts != null && alts.length > 0 && key.rect.width() > dp(28) && key.rect.height() > dp(28)) {
+            String hint = transformLongPressOutput(key, alts[0]);
+            c.drawText(hint, key.rect.right - dp(5), key.rect.top + dp(11), altHint);
+        }
     }
 
     protected Key hit(float x, float y) {
@@ -157,32 +273,127 @@ public abstract class BaseKeyboardView extends View {
         return null;
     }
 
+    private void updatePopupRect() {
+        if (!longPressActive || popupKey == null || popupOptions == null || popupOptions.length == 0) return;
+        float itemW = dp(42);
+        float h = dp(48);
+        float totalW = itemW * popupOptions.length;
+        float left = popupKey.rect.centerX() - totalW / 2f;
+        float minLeft = dp(4);
+        float maxRight = getWidth() - dp(4);
+        if (left < minLeft) left = minLeft;
+        if (left + totalW > maxRight) left = maxRight - totalW;
+        float top = popupKey.rect.top - h - dp(7);
+        if (top < dp(3)) top = popupKey.rect.bottom + dp(6);
+        popupRect.set(left, top, left + totalW, top + h);
+    }
+
+    private void updatePopupSelection(float x) {
+        if (!longPressActive || popupOptions == null || popupOptions.length == 0) return;
+        updatePopupRect();
+        float itemW = popupRect.width() / popupOptions.length;
+        int idx = (int)((x - popupRect.left) / itemW);
+        if (idx < 0) idx = 0;
+        if (idx >= popupOptions.length) idx = popupOptions.length - 1;
+        if (popupSelected != idx) {
+            popupSelected = idx;
+            if (listener != null) listener.onKeyFeedback();
+            invalidate();
+        }
+    }
+
+    private void commitPopup() {
+        if (!longPressActive || popupKey == null || popupOptions == null || popupOptions.length == 0 || listener == null) return;
+        int idx = Math.max(0, Math.min(popupOptions.length - 1, popupSelected));
+        String output = transformLongPressOutput(popupKey, popupOptions[idx]);
+        listener.onKeyFeedback();
+        listener.onText(output);
+        Key committedKey = popupKey;
+        clearTouchState();
+        flashKey(committedKey);
+        onLongPressCommitted(committedKey, output);
+    }
+
+    private void clearTouchState() {
+        stopHoldActions();
+        downKey = null;
+        pressedKey = null;
+        popupKey = null;
+        popupOptions = null;
+        popupSelected = 0;
+        longPressActive = false;
+        repeatingBackspace = false;
+        invalidate();
+    }
+
+    @Override public void onDrawForeground(Canvas c) {
+        super.onDrawForeground(c);
+        if (!longPressActive || popupKey == null || popupOptions == null || popupOptions.length == 0) return;
+        updatePopupRect();
+        c.drawRoundRect(popupRect, dp(12), dp(12), popupFill);
+        float itemW = popupRect.width() / popupOptions.length;
+        for (int i=0; i<popupOptions.length; i++) {
+            float l = popupRect.left + i * itemW;
+            RectF item = new RectF(l, popupRect.top, l + itemW, popupRect.bottom);
+            if (i == popupSelected) c.drawRoundRect(item, dp(10), dp(10), popupSelectedFill);
+            String shown = transformLongPressOutput(popupKey, popupOptions[i]);
+            Paint.FontMetrics fm = popupText.getFontMetrics();
+            float cy = item.centerY() - (fm.ascent + fm.descent) / 2f;
+            c.drawText(shown, item.centerX(), cy, popupText);
+        }
+    }
+
     @Override public boolean onTouchEvent(MotionEvent e) {
         switch (e.getActionMasked()) {
             case MotionEvent.ACTION_DOWN:
-                pressedKey = hit(e.getX(), e.getY());
+                stopHoldActions();
+                longPressActive = false;
+                popupKey = null;
+                popupOptions = null;
+                repeatingBackspace = false;
+                downKey = hit(e.getX(), e.getY());
+                pressedKey = downKey;
+                scheduleHoldAction(downKey);
                 invalidate();
                 return true;
+
             case MotionEvent.ACTION_MOVE:
+                if (longPressActive) {
+                    updatePopupSelection(e.getX());
+                    return true;
+                }
+                if (repeatingBackspace) return true;
                 Key moved = hit(e.getX(), e.getY());
-                if (moved != pressedKey) {
+                if (moved != downKey) {
+                    stopHoldActions();
+                    downKey = moved;
                     pressedKey = moved;
+                    scheduleHoldAction(moved);
                     invalidate();
                 }
                 return true;
+
             case MotionEvent.ACTION_UP:
-                Key key = hit(e.getX(), e.getY());
-                Key wasPressed = pressedKey;
-                if (key != null && key == wasPressed) {
-                    perform(key);
-                } else {
-                    pressedKey = null;
-                    invalidate();
+                stopHoldActions();
+                if (longPressActive) {
+                    updatePopupSelection(e.getX());
+                    commitPopup();
+                    return true;
                 }
-                return true;
-            case MotionEvent.ACTION_CANCEL:
+                if (repeatingBackspace) {
+                    clearTouchState();
+                    return true;
+                }
+                Key key = hit(e.getX(), e.getY());
+                Key expected = downKey;
+                downKey = null;
                 pressedKey = null;
-                invalidate();
+                if (key != null && key == expected) perform(key);
+                else invalidate();
+                return true;
+
+            case MotionEvent.ACTION_CANCEL:
+                clearTouchState();
                 return true;
         }
         return true;

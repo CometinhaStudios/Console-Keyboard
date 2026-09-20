@@ -59,7 +59,7 @@ public class PortraitKeyboardView extends BaseKeyboardView {
         if (page == 0) {
             rows.add(row("1","2","3","4","5","6","7","8","9","0"));
             rows.add(row("q","w","e","r","t","y","u","i","o","p"));
-            rows.add(row("a","s","d","f","g","h","j","k","l","ç"));
+            rows.add(row("a","s","d","f","g","h","j","k","l"));
             List<Key> r4 = new ArrayList<>();
             r4.add(k("⇧", null, 1.25f, ACT_SHIFT));
             for (String s: Arrays.asList("z","x","c","v","b","n","m")) r4.add(k(s));
@@ -127,6 +127,14 @@ public class PortraitKeyboardView extends BaseKeyboardView {
             return;
         }
         super.perform(key);
+    }
+
+    @Override protected String transformLongPressOutput(Key key, String option) {
+        return upper ? option.toUpperCase(new java.util.Locale("pt", "BR")) : option;
+    }
+
+    @Override protected void onLongPressCommitted(Key key, String output) {
+        if (upper) { upper = false; invalidate(); }
     }
 
     @Override protected void onDraw(Canvas c) {
