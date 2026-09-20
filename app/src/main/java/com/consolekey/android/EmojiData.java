@@ -1,7 +1,6 @@
 package com.consolekey.android;
 
 import android.content.Context;
-import android.graphics.Paint;
 
 import java.io.BufferedReader;
 import java.io.InputStream;
@@ -42,40 +41,34 @@ public final class EmojiData {
             "✍️","💅","🤳","💪","🦵","🦶","👂","👃"
     ));
 
-    public static synchronized String[] category(Context context, int index) {
+    public static String[] category(Context context, int index) {
         if (index < 0 || index >= CACHE.length) return new String[0];
 
-        if (CACHE[index] != null) return CACHE[index];
+        String[] cached = CACHE[index];
+        if (cached != null) return cached;
 
         List<String> out = new ArrayList<>();
-        Paint glyphCheck = new Paint();
-
         String asset = "emoji/" + index + ".txt";
 
         try (
                 InputStream in = context.getAssets().open(asset);
                 BufferedReader reader = new BufferedReader(
-                        new InputStreamReader(in, StandardCharsets.UTF_8)
+                        new InputStreamReader(in, StandardCharsets.UTF_8),
+                        8192
                 )
         ) {
             String line;
 
             while ((line = reader.readLine()) != null) {
-                String emoji = line.trim();
-
-                if (emoji.isEmpty()) continue;
-
-                // Evita quadradinhos/tofu em aparelhos cuja fonte ainda não
-                // recebeu um emoji muito novo.
-                if (glyphCheck.hasGlyph(emoji)) {
-                    out.add(emoji);
-                }
+                String value = line.trim();
+                if (!value.isEmpty()) out.add(value);
             }
         } catch (Throwable ignored) {
         }
 
-        CACHE[index] = out.toArray(new String[0]);
-        return CACHE[index];
+        String[] loaded = out.toArray(new String[0]);
+        CACHE[index] = loaded;
+        return loaded;
     }
 
     public static String[] variants(String emoji) {

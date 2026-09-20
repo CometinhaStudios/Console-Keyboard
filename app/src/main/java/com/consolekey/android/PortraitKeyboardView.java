@@ -48,6 +48,16 @@ public class PortraitKeyboardView extends BaseKeyboardView {
     private boolean emojiScrolling = false;
 
     private final Paint emojiScrollBarPaint = new Paint(Paint.ANTI_ALIAS_FLAG);
+    private final Paint emojiSelectedPaint = new Paint(Paint.ANTI_ALIAS_FLAG);
+
+    // Cache da geometria visível: não recalculamos centenas de emojis a cada frame.
+    private int emojiFirstVisibleRow = 0;
+    private int emojiLastVisibleRow = -1;
+    private float emojiGridTop = 0f;
+    private float emojiGridBottom = 0f;
+    private float emojiGridLeft = 0f;
+    private float emojiGridCellW = 0f;
+    private float emojiGridRowH = 0f;
 
     private final String[] emojiModeIcons = {"⌨","🙂",":-)","GIF","▣","◉","+"};
     private final String[] emojiCategoryIcons = {"⌕","◷","☺","👤","🐾","🍴","⚽","✈","💡","!?","⚑"};
@@ -85,6 +95,7 @@ public class PortraitKeyboardView extends BaseKeyboardView {
         dividerPaint.setStrokeWidth(dp(1));
 
         emojiScrollBarPaint.setColor(Color.rgb(115,115,115));
+        emojiSelectedPaint.setColor(Color.rgb(247,184,35));
 
         emojiScroller = new OverScroller(c);
         emojiTouchSlop = ViewConfiguration.get(c).getScaledTouchSlop();
@@ -392,31 +403,90 @@ public class PortraitKeyboardView extends BaseKeyboardView {
         float viewportH = Math.max(1f, bottom - top);
         float rowH = dp(48);
 
+        emojiGridTop = top;
+        emojiGridBottom = bottom;
+        emojiGridLeft = dp(12);
+        emojiGridRowH = rowH;
+
+        float right = getWidth() - dp(12);
+        emojiGridCellW = Math.max(1f, (right - emojiGridLeft) / 8f);
+
         emojiMaxScroll = Math.max(0f, rows.size() * rowH - viewportH);
         emojiScrollY = Math.max(0f, Math.min(emojiScrollY, emojiMaxScroll));
 
-        if (rows.isEmpty()) return;
+        if (rows.isEmpty()) {
+            emojiFirstVisibleRow = 0;
+            emojiLastVisibleRow = -1;
+            return;
+        }
 
-        float left = dp(12);
-        float right = getWidth() - dp(12);
-        float totalW = right - left;
-        float cellW = totalW / 8f;
+        emojiFirstVisibleRow = Math.max(
+                0,
+                Math.min(rows.size() - 1, (int)Math.floor(emojiScrollY / rowH))
+        );
 
-        for (int r=0; r<rows.size(); r++) {
+        emojiLastVisibleRow = Math.max(
+                emojiFirstVisibleRow,
+                Math.min(
+                        rows.size() - 1,
+                        (int)Math.ceil((emojiScrollY + viewportH) / rowH)
+                )
+        );
+
+        // Só cria retângulos para as linhas que realmente estão na tela
+        // (+ a última parcial). Antes isso era feito para a categoria inteira
+        // em cada frame da rolagem.
+        for (int r = emojiFirstVisibleRow; r <= emojiLastVisibleRow; r++) {
             List<Key> row = rows.get(r);
+            float t = top + r * rowH - emojiScrollY;
 
-            for (int col=0; col<row.size(); col++) {
-                float l = left + col * cellW;
-                float t = top + r * rowH - emojiScrollY;
+            for (int col = 0; col < row.size(); col++) {
+                float l = emojiGridLeft + col * emojiGridCellW;
 
                 row.get(col).rect.set(
                         l,
                         t,
-                        l + cellW,
+                        l + emojiGridCellW,
                         t + rowH
                 );
             }
         }
+    }
+
+    @Override protected Key hit(float x, float y) {
+        if (!emojiMode) return super.hit(x, y);
+
+        if (rows.isEmpty()) return null;
+
+        float top = emojiModeBarH + emojiCategoryBarH + dp(4);
+        float bottom = getHeight() - dp(4);
+
+        if (y < top || y > bottom) return null;
+
+        float left = dp(12);
+        float right = getWidth() - dp(12);
+
+        if (x < left || x > right) return null;
+
+        float rowH = dp(48);
+        float cellW = Math.max(1f, (right - left) / 8f);
+
+        int rowIndex = (int)((y - top + emojiScrollY) / rowH);
+        int colIndex = (int)((x - left) / cellW);
+
+        if (rowIndex < 0 || rowIndex >= rows.size()) return null;
+
+        List<Key> row = rows.get(rowIndex);
+        if (colIndex < 0 || colIndex >= row.size()) return null;
+
+        Key key = row.get(colIndex);
+
+        // Mantém o rect da tecla correto para animação e popup de long press.
+        float keyTop = top + rowIndex * rowH - emojiScrollY;
+        float keyLeft = left + colIndex * cellW;
+        key.rect.set(keyLeft, keyTop, keyLeft + cellW, keyTop + rowH);
+
+        return key;
     }
 
     private void stopEmojiFling() {
@@ -480,10 +550,7 @@ public class PortraitKeyboardView extends BaseKeyboardView {
             float cy = emojiModeBarH * 0.5f;
 
             if (i == 1) {
-                Paint selected = new Paint(Paint.ANTI_ALIAS_FLAG);
-                selected.setColor(Color.rgb(247,184,35));
-
-                c.drawCircle(cx, cy, dp(19), selected);
+                c.drawCircle(cx, cy, dp(19), emojiSelectedPaint);
 
                 Paint.FontMetrics fm = emojiActiveIconPaint.getFontMetrics();
                 float ty = cy - (fm.ascent + fm.descent) / 2f;
@@ -516,9 +583,6 @@ public class PortraitKeyboardView extends BaseKeyboardView {
             boolean selected = i == emojiCategory;
 
             if (selected) {
-                Paint active = new Paint(Paint.ANTI_ALIAS_FLAG);
-                active.setColor(Color.rgb(247,184,35));
-
                 c.drawRoundRect(
                         cx - dp(15),
                         cy - dp(15),
@@ -526,7 +590,7 @@ public class PortraitKeyboardView extends BaseKeyboardView {
                         cy + dp(15),
                         dp(15),
                         dp(15),
-                        active
+                        emojiSelectedPaint
                 );
             }
 
@@ -551,7 +615,12 @@ public class PortraitKeyboardView extends BaseKeyboardView {
 
         if (emojiCategory == 1 && rows.isEmpty()) {
             float cy = (top + bottom) * 0.5f;
-            c.drawText("Seus emojis recentes aparecem aqui", getWidth() * 0.5f, cy, emojiHintPaint);
+            c.drawText(
+                    "Seus emojis recentes aparecem aqui",
+                    getWidth() * 0.5f,
+                    cy,
+                    emojiHintPaint
+            );
             return;
         }
 
@@ -559,19 +628,27 @@ public class PortraitKeyboardView extends BaseKeyboardView {
         c.clipRect(0, top, getWidth(), bottom);
 
         text.setTextAlign(Paint.Align.CENTER);
+        text.setColor(Color.WHITE);
 
-        for (List<Key> row : rows) {
-            for (Key key : row) {
-                if (key.rect.bottom < top || key.rect.top > bottom) continue;
+        // Todas as células de emoji têm a mesma altura, então tamanho da fonte
+        // e FontMetrics são calculados uma vez por frame.
+        float size = Math.min(dp(30), dp(48) * 0.62f);
+        text.setTextSize(size);
+        Paint.FontMetrics fm = text.getFontMetrics();
+        float baselineOffset = - (fm.ascent + fm.descent) / 2f;
 
-                float size = Math.min(dp(30), key.rect.height() * 0.62f);
-                text.setTextSize(size);
-                text.setColor(Color.WHITE);
+        if (emojiLastVisibleRow >= emojiFirstVisibleRow) {
+            for (int r = emojiFirstVisibleRow; r <= emojiLastVisibleRow; r++) {
+                List<Key> row = rows.get(r);
 
-                Paint.FontMetrics fm = text.getFontMetrics();
-                float cy = key.rect.centerY() - (fm.ascent + fm.descent) / 2f;
-
-                c.drawText(key.label, key.rect.centerX(), cy, text);
+                for (Key key : row) {
+                    c.drawText(
+                            key.label,
+                            key.rect.centerX(),
+                            key.rect.centerY() + baselineOffset,
+                            text
+                    );
+                }
             }
         }
 
