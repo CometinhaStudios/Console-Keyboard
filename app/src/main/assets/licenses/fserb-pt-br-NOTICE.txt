@@ -1,0 +1,7 @@
+Console Keyboard - dicionário PT-BR
+
+Fonte lexical: fserb/pt-br
+https://github.com/fserb/pt-br
+
+Licença: MIT.
+O corpus é usado como base lexical/frequência do corretor local.

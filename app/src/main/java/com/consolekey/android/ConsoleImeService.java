@@ -17,112 +17,173 @@ import android.view.KeyEvent;
 import android.view.View;
 import android.view.inputmethod.EditorInfo;
 import android.view.inputmethod.InputConnection;
-import android.view.textservice.SentenceSuggestionsInfo;
-import android.view.textservice.SpellCheckerSession;
-import android.view.textservice.SuggestionsInfo;
-import android.view.textservice.TextInfo;
-import android.view.textservice.TextServicesManager;
 
-import java.text.Normalizer;
 import java.util.ArrayList;
-import java.util.HashMap;
-import java.util.HashSet;
+import java.util.List;
 import java.util.Locale;
-import java.util.Set;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
+import java.util.concurrent.atomic.AtomicInteger;
 
 public class ConsoleImeService extends InputMethodService
         implements InputManagerCompat.Listener,
-        BaseKeyboardView.Listener,
-        SpellCheckerSession.SpellCheckerSessionListener {
+        BaseKeyboardView.Listener {
 
-    public static final String PREFS = "keyboard_prefs";
-    public static final String PREF_PORTRAIT_HEIGHT = "portrait_height";
-    public static final String PREF_LANDSCAPE_HEIGHT = "landscape_height";
-    public static final String PREF_LONG_PRESS_DELAY = "long_press_delay";
+    public static final String PREFS =
+            "keyboard_prefs";
+
+    public static final String PREF_PORTRAIT_HEIGHT =
+            "portrait_height";
+
+    public static final String PREF_LANDSCAPE_HEIGHT =
+            "landscape_height";
+
+    public static final String PREF_LONG_PRESS_DELAY =
+            "long_press_delay";
 
     private InputManagerCompat inputManager;
     private BaseKeyboardView keyboardView;
 
-    private ControllerDetector.Family activeFamily = ControllerDetector.Family.GENERIC;
+    private ControllerDetector.Family activeFamily =
+            ControllerDetector.Family.GENERIC;
+
     private int activeControllerId = -1;
 
-    private final ExecutorService hapticExecutor = Executors.newSingleThreadExecutor();
-    private final Handler mainHandler = new Handler(Looper.getMainLooper());
-
-    private SpellCheckerSession spellChecker;
-    private final HashMap<Integer, String> spellRequests = new HashMap<>();
-    private int spellSequence = 1;
-
-    private String suggestionWord = "";
-    private String safeAutocorrect = null;
-    private String[] visibleSuggestions = new String[0];
-    private boolean correctionEnabled = false;
     private boolean numericInput = false;
+    private boolean correctionEnabled = false;
 
-    private final Runnable suggestionRefresh = this::requestSuggestionsNow;
+    private final ExecutorService hapticExecutor =
+            Executors.newSingleThreadExecutor();
+
+    private final ExecutorService languageExecutor =
+            Executors.newSingleThreadExecutor();
+
+    private final Handler mainHandler =
+            new Handler(Looper.getMainLooper());
+
+    private final AtomicInteger suggestionGeneration =
+            new AtomicInteger();
+
+    private LocalDictionary dictionary;
+    private PersonalLanguageModel personal;
+
+    private String pendingWordNorm = "";
+    private LocalDictionary.Correction pendingCorrection;
+
+    private final Runnable suggestionRefresh =
+            this::requestSuggestionsNow;
 
     @Override public void onCreate() {
         super.onCreate();
-        inputManager = new InputManagerCompat(this, this);
-        inputManager.register();
-        refreshController();
-        // Corretor antigo desativado nesta versão.
-    }
 
-    private void openSpellChecker() {
-        try {
-            TextServicesManager tsm = (TextServicesManager)getSystemService(Context.TEXT_SERVICES_MANAGER_SERVICE);
-            if (tsm != null) {
-                spellChecker = tsm.newSpellCheckerSession(null, new Locale("pt", "BR"), this, true);
-            }
-        } catch (Throwable ignored) {
-            spellChecker = null;
-        }
+        inputManager =
+                new InputManagerCompat(
+                        this,
+                        this
+                );
+
+        inputManager.register();
+
+        dictionary =
+                new LocalDictionary(this);
+
+        personal =
+                new PersonalLanguageModel(this);
+
+        refreshController();
     }
 
     @Override public void onDestroy() {
-        if (inputManager != null) inputManager.unregister();
-        mainHandler.removeCallbacks(suggestionRefresh);
-        try { if (spellChecker != null) spellChecker.close(); } catch (Throwable ignored) {}
+        if (inputManager != null) {
+            inputManager.unregister();
+        }
+
+        mainHandler.removeCallbacks(
+                suggestionRefresh
+        );
+
+        languageExecutor.shutdownNow();
         hapticExecutor.shutdownNow();
+
+        try {
+            if (personal != null) {
+                personal.close();
+            }
+        } catch (Throwable ignored) {}
+
         super.onDestroy();
     }
 
-    @Override public boolean onEvaluateFullscreenMode() { return false; }
+    @Override public boolean onEvaluateFullscreenMode() {
+        return false;
+    }
 
     private boolean landscape() {
-        return getResources().getConfiguration().orientation == Configuration.ORIENTATION_LANDSCAPE;
+        return getResources()
+                .getConfiguration()
+                .orientation ==
+                Configuration.ORIENTATION_LANDSCAPE;
     }
 
     private int preferredHeightDp() {
-        SharedPreferences p = getSharedPreferences(PREFS, MODE_PRIVATE);
-        return p.getInt(landscape() ? PREF_LANDSCAPE_HEIGHT : PREF_PORTRAIT_HEIGHT, landscape() ? 150 : 235);
+        SharedPreferences p =
+                getSharedPreferences(
+                        PREFS,
+                        MODE_PRIVATE
+                );
+
+        return p.getInt(
+                landscape()
+                        ? PREF_LANDSCAPE_HEIGHT
+                        : PREF_PORTRAIT_HEIGHT,
+                landscape() ? 150 : 235
+        );
     }
 
     private void applyKeyboardHeight() {
-        if (keyboardView != null) keyboardView.setFixedHeightDp(preferredHeightDp());
+        if (keyboardView != null) {
+            keyboardView.setFixedHeightDp(
+                    preferredHeightDp()
+            );
+        }
     }
 
-    private void applySuggestionsToView() {
+    private void setSuggestions(
+            String[] values
+    ) {
         if (keyboardView instanceof PortraitKeyboardView) {
-            ((PortraitKeyboardView)keyboardView).setSuggestions(visibleSuggestions);
+            ((PortraitKeyboardView)keyboardView)
+                    .setSuggestions(values);
         } else if (keyboardView instanceof ConsoleKeyboardView) {
-            ((ConsoleKeyboardView)keyboardView).setSuggestions(visibleSuggestions);
+            ((ConsoleKeyboardView)keyboardView)
+                    .setSuggestions(values);
         }
     }
 
     @Override public View onCreateInputView() {
         if (landscape()) {
-            ConsoleKeyboardView v = new ConsoleKeyboardView(this, this);
-            v.setControllerFamily(activeFamily);
+            ConsoleKeyboardView v =
+                    new ConsoleKeyboardView(
+                            this,
+                            this,
+                            numericInput
+                    );
+
+            v.setControllerFamily(
+                    activeFamily
+            );
+
             keyboardView = v;
         } else {
-            keyboardView = new PortraitKeyboardView(this, this);
+            keyboardView =
+                    new PortraitKeyboardView(
+                            this,
+                            this,
+                            numericInput
+                    );
         }
+
         applyKeyboardHeight();
-        applySuggestionsToView();
         return keyboardView;
     }
 
@@ -130,365 +191,957 @@ public class ConsoleImeService extends InputMethodService
             EditorInfo info,
             boolean restarting
     ) {
-        super.onStartInputView(info, restarting);
+        super.onStartInputView(
+                info,
+                restarting
+        );
 
-        int inputClass = info == null
-                ? 0
-                : (info.inputType & InputType.TYPE_MASK_CLASS);
+        int inputClass =
+                info == null
+                        ? 0
+                        : info.inputType &
+                        InputType.TYPE_MASK_CLASS;
 
         numericInput =
-                inputClass == InputType.TYPE_CLASS_NUMBER ||
-                inputClass == InputType.TYPE_CLASS_PHONE;
+                inputClass ==
+                        InputType.TYPE_CLASS_NUMBER ||
+                inputClass ==
+                        InputType.TYPE_CLASS_PHONE;
 
-        correctionEnabled = false;
-        clearSuggestions();
+        correctionEnabled =
+                canUseCorrection(info);
 
-        setInputView(onCreateInputView());
+        pendingWordNorm = "";
+        pendingCorrection = null;
+
+        suggestionGeneration.incrementAndGet();
+
+        setInputView(
+                onCreateInputView()
+        );
+
+        if (correctionEnabled) {
+            scheduleSuggestionRefresh();
+        } else {
+            setSuggestions(
+                    new String[0]
+            );
+        }
     }
 
-    @Override public void onConfigurationChanged(Configuration newConfig) {
-        super.onConfigurationChanged(newConfig);
-        setInputView(onCreateInputView());
+    @Override public void onFinishInput() {
+        suggestionGeneration.incrementAndGet();
+
+        mainHandler.removeCallbacks(
+                suggestionRefresh
+        );
+
+        pendingWordNorm = "";
+        pendingCorrection = null;
+
+        super.onFinishInput();
+    }
+
+    @Override public void onConfigurationChanged(
+            Configuration newConfig
+    ) {
+        super.onConfigurationChanged(
+                newConfig
+        );
+
+        setInputView(
+                onCreateInputView()
+        );
+    }
+
+    private boolean canUseCorrection(
+            EditorInfo info
+    ) {
+        if (info == null) {
+            return true;
+        }
+
+        if ((info.inputType &
+                InputType.TYPE_MASK_CLASS) !=
+                InputType.TYPE_CLASS_TEXT) {
+
+            return false;
+        }
+
+        int variation =
+                info.inputType &
+                InputType.TYPE_MASK_VARIATION;
+
+        return variation !=
+                InputType.TYPE_TEXT_VARIATION_PASSWORD &&
+                variation !=
+                InputType.TYPE_TEXT_VARIATION_VISIBLE_PASSWORD &&
+                variation !=
+                InputType.TYPE_TEXT_VARIATION_WEB_PASSWORD &&
+                variation !=
+                InputType.TYPE_TEXT_VARIATION_EMAIL_ADDRESS &&
+                variation !=
+                InputType.TYPE_TEXT_VARIATION_WEB_EMAIL_ADDRESS &&
+                variation !=
+                InputType.TYPE_TEXT_VARIATION_URI;
     }
 
     private void refreshController() {
-        ControllerDetector.Family found = ControllerDetector.Family.GENERIC;
+        ControllerDetector.Family found =
+                ControllerDetector.Family.GENERIC;
+
         int foundId = -1;
+
         for (int id : InputDevice.getDeviceIds()) {
-            InputDevice d = InputDevice.getDevice(id);
+            InputDevice d =
+                    InputDevice.getDevice(id);
+
             if (ControllerDetector.isGamepad(d)) {
-                ControllerDetector.Family f = ControllerDetector.detect(d);
-                if (foundId == -1) foundId = id;
-                if (f != ControllerDetector.Family.GENERIC) {
+                ControllerDetector.Family f =
+                        ControllerDetector.detect(d);
+
+                if (foundId == -1) {
+                    foundId = id;
+                }
+
+                if (f !=
+                        ControllerDetector.Family.GENERIC) {
+
                     found = f;
                     foundId = id;
                     break;
                 }
             }
         }
+
         activeFamily = found;
         activeControllerId = foundId;
+
         if (keyboardView instanceof ConsoleKeyboardView) {
-            ((ConsoleKeyboardView)keyboardView).setControllerFamily(found);
+            ((ConsoleKeyboardView)keyboardView)
+                    .setControllerFamily(found);
         }
     }
 
     private boolean vibrateGamepad() {
-        if (activeControllerId < 0) return false;
-        InputDevice d = InputDevice.getDevice(activeControllerId);
-        if (!ControllerDetector.isGamepad(d)) return false;
+        if (activeControllerId < 0) {
+            return false;
+        }
+
+        InputDevice d =
+                InputDevice.getDevice(
+                        activeControllerId
+                );
+
+        if (!ControllerDetector.isGamepad(d)) {
+            return false;
+        }
+
         try {
             Vibrator v;
-            if (Build.VERSION.SDK_INT >= 31) v = d.getVibratorManager().getDefaultVibrator();
-            else v = d.getVibrator();
-            if (v != null && v.hasVibrator()) {
-                v.vibrate(VibrationEffect.createOneShot(20, 120));
+
+            if (Build.VERSION.SDK_INT >= 31) {
+                v = d.getVibratorManager()
+                        .getDefaultVibrator();
+            } else {
+                v = d.getVibrator();
+            }
+
+            if (v != null &&
+                    v.hasVibrator()) {
+
+                v.vibrate(
+                        VibrationEffect.createOneShot(
+                                20,
+                                120
+                        )
+                );
+
                 return true;
             }
         } catch (Throwable ignored) {}
+
         return false;
     }
 
     private void vibratePhone() {
         try {
             Vibrator v;
+
             if (Build.VERSION.SDK_INT >= 31) {
-                VibratorManager vm = (VibratorManager)getSystemService(Context.VIBRATOR_MANAGER_SERVICE);
-                v = vm == null ? null : vm.getDefaultVibrator();
+                VibratorManager vm =
+                        (VibratorManager)getSystemService(
+                                Context.VIBRATOR_MANAGER_SERVICE
+                        );
+
+                v = vm == null
+                        ? null
+                        : vm.getDefaultVibrator();
             } else {
-                v = (Vibrator)getSystemService(Context.VIBRATOR_SERVICE);
+                v = (Vibrator)getSystemService(
+                        Context.VIBRATOR_SERVICE
+                );
             }
-            if (v != null && v.hasVibrator()) v.vibrate(VibrationEffect.createOneShot(14, 120));
+
+            if (v != null &&
+                    v.hasVibrator()) {
+
+                v.vibrate(
+                        VibrationEffect.createOneShot(
+                                14,
+                                120
+                        )
+                );
+            }
         } catch (Throwable ignored) {}
     }
 
     @Override public void onKeyFeedback() {
         try {
-            hapticExecutor.execute(() -> { if (!vibrateGamepad()) vibratePhone(); });
+            hapticExecutor.execute(
+                    () -> {
+                        if (!vibrateGamepad()) {
+                            vibratePhone();
+                        }
+                    }
+            );
         } catch (Throwable ignored) {}
     }
 
     @Override public void onOpenSettings() {
         requestHideSelf(0);
-        Intent i = new Intent(this, MainActivity.class);
-        i.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK);
+
+        Intent i =
+                new Intent(
+                        this,
+                        MainActivity.class
+                );
+
+        i.addFlags(
+                Intent.FLAG_ACTIVITY_NEW_TASK
+        );
+
         startActivity(i);
     }
 
-    @Override public boolean onKeyDown(int keyCode, KeyEvent event) {
-        InputDevice d = event.getDevice();
+    @Override public boolean onKeyDown(
+            int keyCode,
+            KeyEvent event
+    ) {
+        InputDevice d =
+                event.getDevice();
+
         if (ControllerDetector.isGamepad(d)) {
-            activeControllerId = d.getId();
-            activeFamily = ControllerDetector.detect(d);
+            activeControllerId =
+                    d.getId();
+
+            activeFamily =
+                    ControllerDetector.detect(d);
+
             if (keyboardView instanceof ConsoleKeyboardView) {
-                ConsoleKeyboardView v = (ConsoleKeyboardView)keyboardView;
-                v.setControllerFamily(activeFamily);
-                if (v.handleGamepadKey(keyCode, event)) return true;
+                ConsoleKeyboardView v =
+                        (ConsoleKeyboardView)keyboardView;
+
+                v.setControllerFamily(
+                        activeFamily
+                );
+
+                if (v.handleGamepadKey(
+                        keyCode,
+                        event
+                )) {
+                    return true;
+                }
             }
         }
-        return super.onKeyDown(keyCode, event);
+
+        return super.onKeyDown(
+                keyCode,
+                event
+        );
     }
 
-    @Override public boolean onKeyUp(int keyCode, KeyEvent event) {
-        InputDevice d = event.getDevice();
-        if (ControllerDetector.isGamepad(d) && keyboardView instanceof ConsoleKeyboardView) {
-            if (((ConsoleKeyboardView)keyboardView).handleGamepadKey(keyCode, event)) return true;
+    @Override public boolean onKeyUp(
+            int keyCode,
+            KeyEvent event
+    ) {
+        InputDevice d =
+                event.getDevice();
+
+        if (ControllerDetector.isGamepad(d) &&
+                keyboardView instanceof ConsoleKeyboardView) {
+
+            if (((ConsoleKeyboardView)keyboardView)
+                    .handleGamepadKey(
+                            keyCode,
+                            event
+                    )) {
+
+                return true;
+            }
         }
-        return super.onKeyUp(keyCode, event);
+
+        return super.onKeyUp(
+                keyCode,
+                event
+        );
     }
 
-    @Override public void onDeviceChanged() { refreshController(); }
-
-    private InputConnection ic() { return getCurrentInputConnection(); }
-
-    @Override public void onText(String text) {
-        InputConnection c = ic();
-        if (c != null) c.commitText(text, 1);
-        scheduleSuggestionRefresh();
+    @Override public void onDeviceChanged() {
+        refreshController();
     }
 
-    @Override public void onReplaceLast(String oldText, String newText) {
+    private InputConnection ic() {
+        return getCurrentInputConnection();
+    }
+
+    private String beforeCursor(
+            int amount
+    ) {
         InputConnection c = ic();
-        if (c == null || newText == null) return;
-        int oldLength = oldText == null ? 0 : oldText.length();
-        if (oldLength > 0) c.deleteSurroundingText(oldLength, 0);
-        c.commitText(newText, 1);
-        scheduleSuggestionRefresh();
+
+        if (c == null) {
+            return "";
+        }
+
+        CharSequence value =
+                c.getTextBeforeCursor(
+                        amount,
+                        0
+                );
+
+        return value == null
+                ? ""
+                : value.toString();
+    }
+
+    private boolean isWordChar(char ch) {
+        return Character.isLetter(ch) ||
+                ch == '\'' ||
+                ch == '’' ||
+                ch == '-';
+    }
+
+    private String currentWord(
+            String before
+    ) {
+        if (before == null ||
+                before.isEmpty()) {
+
+            return "";
+        }
+
+        int end = before.length();
+        int start = end;
+
+        while (start > 0 &&
+                isWordChar(
+                        before.charAt(
+                                start - 1
+                        )
+                )) {
+
+            start--;
+        }
+
+        if (start == end) {
+            return "";
+        }
+
+        return before.substring(
+                start,
+                end
+        );
+    }
+
+    private List<String> words(
+            String text
+    ) {
+        List<String> out =
+                new ArrayList<>();
+
+        if (text == null ||
+                text.isEmpty()) {
+
+            return out;
+        }
+
+        StringBuilder current =
+                new StringBuilder();
+
+        for (int i=0; i<text.length(); i++) {
+            char ch = text.charAt(i);
+
+            if (isWordChar(ch)) {
+                current.append(ch);
+            } else if (current.length() > 0) {
+                out.add(
+                        current.toString()
+                );
+
+                current.setLength(0);
+            }
+        }
+
+        if (current.length() > 0) {
+            out.add(
+                    current.toString()
+            );
+        }
+
+        return out;
+    }
+
+    private String[] previousWordsBeforeCurrent(
+            String before,
+            String current
+    ) {
+        String prefix = before;
+
+        if (current != null &&
+                !current.isEmpty() &&
+                before.endsWith(current)) {
+
+            prefix =
+                    before.substring(
+                            0,
+                            before.length() -
+                                    current.length()
+                    );
+        }
+
+        List<String> all =
+                words(prefix);
+
+        String prev1 =
+                all.size() >= 1
+                        ? all.get(
+                                all.size() - 1
+                        )
+                        : "";
+
+        String prev2 =
+                all.size() >= 2
+                        ? all.get(
+                                all.size() - 2
+                        )
+                        : "";
+
+        return new String[]{
+                prev2,
+                prev1
+        };
+    }
+
+    private String matchCase(
+            String source,
+            String candidate
+    ) {
+        if (candidate == null ||
+                candidate.isEmpty() ||
+                source == null ||
+                source.isEmpty()) {
+
+            return candidate;
+        }
+
+        Locale pt =
+                new Locale(
+                        "pt",
+                        "BR"
+                );
+
+        if (source.equals(
+                source.toUpperCase(pt))) {
+
+            return candidate.toUpperCase(pt);
+        }
+
+        if (Character.isUpperCase(
+                source.charAt(0))) {
+
+            return Character.toUpperCase(
+                    candidate.charAt(0)
+            ) +
+                    candidate.substring(1);
+        }
+
+        return candidate;
+    }
+
+    private void replaceCurrentWord(
+            String oldWord,
+            String newWord
+    ) {
+        InputConnection c = ic();
+
+        if (c == null ||
+                oldWord == null ||
+                oldWord.isEmpty() ||
+                newWord == null ||
+                newWord.isEmpty()) {
+
+            return;
+        }
+
+        c.deleteSurroundingText(
+                oldWord.length(),
+                0
+        );
+
+        c.commitText(
+                newWord,
+                1
+        );
+    }
+
+    private boolean replacePreviousWordAfterSpace(
+            String oldWord,
+            String newWord
+    ) {
+        InputConnection c = ic();
+
+        if (c == null ||
+                oldWord == null ||
+                newWord == null) {
+
+            return false;
+        }
+
+        String tail =
+                beforeCursor(
+                        oldWord.length() +
+                                2
+                );
+
+        String expected =
+                oldWord + " ";
+
+        if (!tail.endsWith(expected)) {
+            return false;
+        }
+
+        c.deleteSurroundingText(
+                expected.length(),
+                0
+        );
+
+        c.commitText(
+                newWord + " ",
+                1
+        );
+
+        return true;
+    }
+
+    @Override public void onText(
+            String text
+    ) {
+        InputConnection c = ic();
+
+        if (c != null) {
+            c.commitText(
+                    text,
+                    1
+            );
+        }
+
+        if (correctionEnabled) {
+            scheduleSuggestionRefresh();
+        }
+    }
+
+    @Override public void onReplaceLast(
+            String oldText,
+            String newText
+    ) {
+        InputConnection c = ic();
+
+        if (c == null ||
+                newText == null) {
+
+            return;
+        }
+
+        int length =
+                oldText == null
+                        ? 0
+                        : oldText.length();
+
+        if (length > 0) {
+            c.deleteSurroundingText(
+                    length,
+                    0
+            );
+        }
+
+        c.commitText(
+                newText,
+                1
+        );
+
+        if (correctionEnabled) {
+            scheduleSuggestionRefresh();
+        }
     }
 
     @Override public void onBackspace() {
         InputConnection c = ic();
-        if (c != null) c.deleteSurroundingText(1, 0);
-        scheduleSuggestionRefresh();
+
+        if (c != null) {
+            c.deleteSurroundingText(
+                    1,
+                    0
+            );
+        }
+
+        if (correctionEnabled) {
+            scheduleSuggestionRefresh();
+        }
     }
 
     @Override public void onEnter() {
-        InputConnection c = ic();
-        if (c != null) {
-            c.sendKeyEvent(new KeyEvent(KeyEvent.ACTION_DOWN, KeyEvent.KEYCODE_ENTER));
-            c.sendKeyEvent(new KeyEvent(KeyEvent.ACTION_UP, KeyEvent.KEYCODE_ENTER));
+        String before =
+                beforeCursor(160);
+
+        String current =
+                currentWord(before);
+
+        if (correctionEnabled &&
+                !current.isEmpty()) {
+
+            String[] context =
+                    previousWordsBeforeCurrent(
+                            before,
+                            current
+                    );
+
+            languageExecutor.execute(
+                    () -> personal.learn(
+                            context[0],
+                            context[1],
+                            current
+                    )
+            );
         }
-        clearSuggestions();
+
+        InputConnection c = ic();
+
+        if (c != null) {
+            c.sendKeyEvent(
+                    new KeyEvent(
+                            KeyEvent.ACTION_DOWN,
+                            KeyEvent.KEYCODE_ENTER
+                    )
+            );
+
+            c.sendKeyEvent(
+                    new KeyEvent(
+                            KeyEvent.ACTION_UP,
+                            KeyEvent.KEYCODE_ENTER
+                    )
+            );
+        }
+
+        setSuggestions(
+                new String[0]
+        );
     }
 
     @Override public void onSpace() {
         InputConnection c = ic();
-        if (c == null) return;
-        String word = currentWord();
-        if (correctionEnabled && word != null && !word.isEmpty() && word.equalsIgnoreCase(suggestionWord) &&
-                safeAutocorrect != null && !safeAutocorrect.equalsIgnoreCase(word)) {
-            replaceCurrentWord(matchCase(word, safeAutocorrect));
-        }
-        c.commitText(" ", 1);
-        clearSuggestions();
-    }
 
-    @Override public void onSuggestionSelected(String suggestion) {
-        if (suggestion == null || suggestion.isEmpty()) return;
-        String word = currentWord();
-        if (word != null && !word.isEmpty() && !suggestion.equalsIgnoreCase(word)) {
-            replaceCurrentWord(matchCase(word, suggestion));
-        }
-        scheduleSuggestionRefresh();
-    }
-
-    @Override public void onHide() { requestHideSelf(0); }
-
-    private boolean canUseCorrection(EditorInfo info) {
-        if (info == null) return true;
-        if ((info.inputType & InputType.TYPE_MASK_CLASS) != InputType.TYPE_CLASS_TEXT) return false;
-        int variation = info.inputType & InputType.TYPE_MASK_VARIATION;
-        return variation != InputType.TYPE_TEXT_VARIATION_PASSWORD &&
-                variation != InputType.TYPE_TEXT_VARIATION_VISIBLE_PASSWORD &&
-                variation != InputType.TYPE_TEXT_VARIATION_WEB_PASSWORD &&
-                variation != InputType.TYPE_TEXT_VARIATION_EMAIL_ADDRESS &&
-                variation != InputType.TYPE_TEXT_VARIATION_WEB_EMAIL_ADDRESS &&
-                variation != InputType.TYPE_TEXT_VARIATION_URI;
-    }
-
-    private void scheduleSuggestionRefresh() {
-        // Corretor será refeito com dicionário próprio em outra versão.
-    }
-
-    private String currentWord() {
-        InputConnection c = ic();
-        if (c == null) return "";
-        CharSequence before = c.getTextBeforeCursor(64, 0);
-        if (before == null || before.length() == 0) return "";
-        int end = before.length();
-        int start = end;
-        while (start > 0) {
-            char ch = before.charAt(start - 1);
-            if (Character.isLetter(ch) || ch == '\'' || ch == '’') start--;
-            else break;
-        }
-        if (start == end) return "";
-        return before.subSequence(start, end).toString();
-    }
-
-    private void requestSuggestionsNow() {
-        if (!correctionEnabled) { clearSuggestions(); return; }
-        String word = currentWord();
-        if (word == null || word.length() < 2) { clearSuggestions(); return; }
-
-        if (spellChecker == null) {
-            visibleSuggestions = localFallbackSuggestions(word);
-            suggestionWord = word;
-            safeAutocorrect = localSafeAutocorrect(word);
-            applySuggestionsToView();
+        if (c == null) {
             return;
         }
 
-        int sequence = spellSequence++;
-        if (spellRequests.size() > 64) spellRequests.clear();
-        spellRequests.put(sequence, word);
-        try {
-            spellChecker.getSuggestions(new TextInfo[]{ new TextInfo(word, 0x434B, sequence) }, 5, false);
-        } catch (Throwable ignored) {
-            visibleSuggestions = localFallbackSuggestions(word);
-            suggestionWord = word;
-            safeAutocorrect = localSafeAutocorrect(word);
-            applySuggestionsToView();
-        }
-    }
+        if (!correctionEnabled) {
+            c.commitText(
+                    " ",
+                    1
+            );
 
-    @Override public void onGetSuggestions(SuggestionsInfo[] results) {
-        if (results == null || results.length == 0) return;
-        SuggestionsInfo info = results[0];
-        String requested = spellRequests.remove(info.getSequence());
-        if (requested == null) return;
-        String now = currentWord();
-        if (!requested.equalsIgnoreCase(now)) return;
-
-        int attrs = info.getSuggestionsAttributes();
-        boolean inDictionary = (attrs & SuggestionsInfo.RESULT_ATTR_IN_THE_DICTIONARY) != 0;
-        boolean looksTypo = (attrs & SuggestionsInfo.RESULT_ATTR_LOOKS_LIKE_TYPO) != 0;
-        boolean recommended = (attrs & SuggestionsInfo.RESULT_ATTR_HAS_RECOMMENDED_SUGGESTIONS) != 0;
-
-        ArrayList<String> display = new ArrayList<>();
-        Set<String> seen = new HashSet<>();
-        addSuggestion(display, seen, requested);
-
-        String firstCorrection = null;
-        for (int i=0; i<info.getSuggestionsCount() && display.size()<3; i++) {
-            String candidate = info.getSuggestionAt(i);
-            if (candidate == null || candidate.isEmpty()) continue;
-            candidate = matchCase(requested, candidate);
-            if (candidate.equalsIgnoreCase(requested)) continue;
-            if (firstCorrection == null) firstCorrection = candidate;
-            addSuggestion(display, seen, candidate);
+            return;
         }
 
-        for (String value : localFallbackSuggestions(requested)) {
-            if (display.size() >= 3) break;
-            addSuggestion(display, seen, value);
+        String before =
+                beforeCursor(160);
+
+        String current =
+                currentWord(before);
+
+        String[] context =
+                previousWordsBeforeCurrent(
+                        before,
+                        current
+                );
+
+        c.commitText(
+                " ",
+                1
+        );
+
+        if (current.isEmpty()) {
+            scheduleSuggestionRefresh();
+            return;
         }
 
-        suggestionWord = requested;
-        visibleSuggestions = display.toArray(new String[0]);
-        safeAutocorrect = null;
+        String currentNorm =
+                LocalDictionary.normalize(
+                        current
+                );
 
-        if (!inDictionary && looksTypo && firstCorrection != null &&
-                isSafeAutocorrect(requested, firstCorrection, recommended)) {
-            safeAutocorrect = firstCorrection;
+        LocalDictionary.Correction ready =
+                currentNorm.equals(
+                        pendingWordNorm
+                )
+                        ? pendingCorrection
+                        : null;
+
+        if (ready != null) {
+            String corrected =
+                    matchCase(
+                            current,
+                            ready.word
+                    );
+
+            replacePreviousWordAfterSpace(
+                    current,
+                    corrected
+            );
+
+            languageExecutor.execute(
+                    () -> personal.learn(
+                            context[0],
+                            context[1],
+                            corrected
+                    )
+            );
+
+            pendingWordNorm = "";
+            pendingCorrection = null;
+
+            scheduleSuggestionRefresh();
+            return;
         }
-        if (safeAutocorrect == null) safeAutocorrect = localSafeAutocorrect(requested);
-        applySuggestionsToView();
+
+        final int generation =
+                suggestionGeneration.incrementAndGet();
+
+        languageExecutor.execute(
+                () -> {
+                    LocalDictionary.Correction correction =
+                            dictionary.bestAutocorrect(
+                                    current,
+                                    personal
+                            );
+
+                    String learned =
+                            correction == null
+                                    ? current
+                                    : matchCase(
+                                            current,
+                                            correction.word
+                                    );
+
+                    personal.learn(
+                            context[0],
+                            context[1],
+                            learned
+                    );
+
+                    mainHandler.post(
+                            () -> {
+                                if (generation !=
+                                        suggestionGeneration.get()) {
+
+                                    return;
+                                }
+
+                                if (correction != null) {
+                                    replacePreviousWordAfterSpace(
+                                            current,
+                                            learned
+                                    );
+                                }
+
+                                scheduleSuggestionRefresh();
+                            }
+                    );
+                }
+        );
     }
 
-    @Override public void onGetSentenceSuggestions(SentenceSuggestionsInfo[] results) {}
+    @Override public void onSuggestionSelected(
+            String suggestion
+    ) {
+        if (suggestion == null ||
+                suggestion.isEmpty()) {
 
-    private void addSuggestion(ArrayList<String> list, Set<String> seen, String value) {
-        if (value == null || value.isEmpty()) return;
-        String key = value.toLowerCase(new Locale("pt", "BR"));
-        if (seen.add(key)) list.add(value);
-    }
-
-    private boolean isSafeAutocorrect(String original, String candidate, boolean recommended) {
-        if (original == null || candidate == null || original.length() < 3) return false;
-        String a = original.toLowerCase(new Locale("pt", "BR"));
-        String b = candidate.toLowerCase(new Locale("pt", "BR"));
-        if (stripAccents(a).equals(stripAccents(b))) return true;
-        int distance = editDistance(a, b);
-        if (recommended && distance <= 2) return true;
-        return distance <= 1 && Math.max(a.length(), b.length()) >= 4;
-    }
-
-    private String stripAccents(String value) {
-        return Normalizer.normalize(value, Normalizer.Form.NFD).replaceAll("\\p{M}+", "");
-    }
-
-    private int editDistance(String a, String b) {
-        int[] prev = new int[b.length() + 1];
-        int[] cur = new int[b.length() + 1];
-        for (int j=0; j<=b.length(); j++) prev[j] = j;
-        for (int i=1; i<=a.length(); i++) {
-            cur[0] = i;
-            for (int j=1; j<=b.length(); j++) {
-                int cost = a.charAt(i-1) == b.charAt(j-1) ? 0 : 1;
-                cur[j] = Math.min(Math.min(cur[j-1] + 1, prev[j] + 1), prev[j-1] + cost);
-            }
-            int[] tmp = prev; prev = cur; cur = tmp;
+            return;
         }
-        return prev[b.length()];
-    }
 
-    private String matchCase(String original, String candidate) {
-        if (candidate == null || candidate.isEmpty()) return candidate;
-        if (original == null || original.isEmpty()) return candidate;
-        Locale pt = new Locale("pt", "BR");
-        if (original.equals(original.toUpperCase(pt))) return candidate.toUpperCase(pt);
-        if (Character.isUpperCase(original.charAt(0))) {
-            return Character.toUpperCase(candidate.charAt(0)) + candidate.substring(1);
-        }
-        return candidate;
-    }
-
-    private void replaceCurrentWord(String replacement) {
-        if (replacement == null || replacement.isEmpty()) return;
         InputConnection c = ic();
-        if (c == null) return;
-        String word = currentWord();
-        if (word == null || word.isEmpty()) return;
-        c.deleteSurroundingText(word.length(), 0);
-        c.commitText(replacement, 1);
-    }
 
-    private void clearSuggestions() {
-        suggestionWord = "";
-        safeAutocorrect = null;
-        visibleSuggestions = new String[0];
-        applySuggestionsToView();
-    }
-
-    private String[] localFallbackSuggestions(String word) {
-        String corrected = localSafeAutocorrect(word);
-        if (corrected == null || corrected.equalsIgnoreCase(word)) return new String[]{ word };
-        return new String[]{ word, matchCase(word, corrected) };
-    }
-
-    private String localSafeAutocorrect(String word) {
-        if (word == null) return null;
-        switch (word.toLowerCase(new Locale("pt", "BR"))) {
-            case "nao": return "não";
-            case "voce": return "você";
-            case "voces": return "vocês";
-            case "tambem": return "também";
-            case "ninguem": return "ninguém";
-            case "alguem": return "alguém";
-            case "facil": return "fácil";
-            case "dificil": return "difícil";
-            case "possivel": return "possível";
-            case "impossivel": return "impossível";
-            case "portugues": return "português";
-            case "ingles": return "inglês";
-            case "coracao": return "coração";
-            case "informacao": return "informação";
-            case "configuracao": return "configuração";
-            case "aplicacao": return "aplicação";
-            case "funcao": return "função";
-            case "opcao": return "opção";
-            default: return null;
+        if (c == null) {
+            return;
         }
+
+        String before =
+                beforeCursor(160);
+
+        String current =
+                currentWord(before);
+
+        String[] context =
+                previousWordsBeforeCurrent(
+                        before,
+                        current
+                );
+
+        String finalWord =
+                current.isEmpty()
+                        ? suggestion
+                        : matchCase(
+                                current,
+                                suggestion
+                        );
+
+        if (!current.isEmpty()) {
+            replaceCurrentWord(
+                    current,
+                    finalWord
+            );
+        } else {
+            c.commitText(
+                    finalWord,
+                    1
+            );
+        }
+
+        c.commitText(
+                " ",
+                1
+        );
+
+        languageExecutor.execute(
+                () -> personal.learn(
+                        context[0],
+                        context[1],
+                        finalWord
+                )
+        );
+
+        scheduleSuggestionRefresh();
+    }
+
+    @Override public void onHide() {
+        requestHideSelf(0);
+    }
+
+    private void scheduleSuggestionRefresh() {
+        mainHandler.removeCallbacks(
+                suggestionRefresh
+        );
+
+        if (!correctionEnabled ||
+                numericInput) {
+
+            setSuggestions(
+                    new String[0]
+            );
+
+            return;
+        }
+
+        mainHandler.postDelayed(
+                suggestionRefresh,
+                24
+        );
+    }
+
+    private void requestSuggestionsNow() {
+        if (!correctionEnabled ||
+                numericInput) {
+
+            return;
+        }
+
+        final String before =
+                beforeCursor(180);
+
+        final String current =
+                currentWord(before);
+
+        final String[] context =
+                previousWordsBeforeCurrent(
+                        before,
+                        current
+                );
+
+        final int generation =
+                suggestionGeneration.incrementAndGet();
+
+        languageExecutor.execute(
+                () -> {
+                    String[] suggestions;
+
+                    LocalDictionary.Correction correction =
+                            null;
+
+                    if (current.length() >= 2) {
+                        suggestions =
+                                dictionary.suggest(
+                                        current,
+                                        personal,
+                                        3
+                                );
+
+                        correction =
+                                dictionary.bestAutocorrect(
+                                        current,
+                                        personal
+                                );
+                    } else if (current.isEmpty()) {
+                        suggestions =
+                                personal.predictNext(
+                                        context[0],
+                                        context[1],
+                                        3
+                                );
+                    } else {
+                        suggestions =
+                                new String[0];
+                    }
+
+                    final LocalDictionary.Correction finalCorrection =
+                            correction;
+
+                    final String[] finalSuggestions =
+                            suggestions;
+
+                    mainHandler.post(
+                            () -> {
+                                if (generation !=
+                                        suggestionGeneration.get()) {
+
+                                    return;
+                                }
+
+                                pendingWordNorm =
+                                        LocalDictionary.normalize(
+                                                current
+                                        );
+
+                                pendingCorrection =
+                                        finalCorrection;
+
+                                setSuggestions(
+                                        finalSuggestions
+                                );
+                            }
+                    );
+                }
+        );
     }
 }

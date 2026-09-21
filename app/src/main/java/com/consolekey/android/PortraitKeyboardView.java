@@ -126,6 +126,11 @@ public class PortraitKeyboardView extends BaseKeyboardView {
 
     public void setSuggestions(String[] values) {
         wordSuggestions = values == null ? new String[0] : values;
+
+        if (!numericMode && page == 0 && !rows.isEmpty()) {
+            rows.set(0, numberRow());
+        }
+
         invalidate();
     }
 
@@ -221,8 +226,22 @@ public class PortraitKeyboardView extends BaseKeyboardView {
     private List<Key> numberRow() {
         List<Key> out = new ArrayList<>();
 
-        for (String s : new String[]{"1","2","3","4","5","6","7","8","9","0"}) {
-            out.add(normalKey(s));
+        if (!numericMode && !emojiMode && page == 0 && wordSuggestions.length > 0) {
+            int count = Math.min(3, wordSuggestions.length);
+
+            for (int i=0; i<count; i++) {
+                String value = wordSuggestions[i];
+
+                if (value != null && !value.isEmpty()) {
+                    out.add(k(value, value, 1f, ACT_SUGGESTION));
+                }
+            }
+
+            if (!out.isEmpty()) return out;
+        }
+
+        for (String value : new String[]{"1","2","3","4","5","6","7","8","9","0"}) {
+            out.add(normalKey(value));
         }
 
         return out;

@@ -94,7 +94,7 @@ public abstract class BaseKeyboardView extends View {
     private final SparseArray<FastTouchState> fastTouches = new SparseArray<>();
     private int fastPopupPointerId = -1;
 
-    public static final int ACT_TEXT=0, ACT_BACKSPACE=1, ACT_ENTER=2, ACT_SPACE=3, ACT_SHIFT=4, ACT_SYMBOLS=5, ACT_HIDE=6, ACT_EMOJI=7;
+    public static final int ACT_TEXT=0, ACT_BACKSPACE=1, ACT_ENTER=2, ACT_SPACE=3, ACT_SHIFT=4, ACT_SYMBOLS=5, ACT_HIDE=6, ACT_EMOJI=7, ACT_SUGGESTION=8;
 
     public BaseKeyboardView(Context c, Listener l) {
         super(c);
@@ -211,6 +211,9 @@ public abstract class BaseKeyboardView extends View {
             case ACT_ENTER: listener.onEnter(); break;
             case ACT_SPACE: listener.onSpace(); break;
             case ACT_HIDE: listener.onHide(); break;
+            case ACT_SUGGESTION:
+                if (key.value != null) listener.onSuggestionSelected(key.value);
+                break;
             default:
                 if (key.value != null) listener.onText(key.value);
                 break;
