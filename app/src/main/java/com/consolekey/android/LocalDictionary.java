@@ -135,11 +135,24 @@ public class LocalDictionary {
                     score = 50.0;
                 }
 
+                String word = parts[2].trim();
+
+                // Defesa contra corpus mal formatado: nunca deixa score/CSV
+                // aparecer como parte da sugestão.
+                word = word.replaceFirst(
+                        ",[-+]?\\d+(?:\\.\\d+)?$",
+                        ""
+                );
+
+                if (!word.matches("[\\p{L}][\\p{L}'’\\-]{0,47}")) {
+                    continue;
+                }
+
                 loaded.add(
                         new Entry(
                                 parts[0],
                                 score,
-                                parts[2]
+                                word
                         )
                 );
             }

@@ -13,7 +13,7 @@ public class PersonalLanguageModel extends SQLiteOpenHelper {
     private static final String DB_NAME =
             "console_keyboard_language.db";
 
-    private static final int DB_VERSION = 1;
+    private static final int DB_VERSION = 2;
 
     private final Locale pt =
             new Locale("pt", "BR");
@@ -69,7 +69,15 @@ public class PersonalLanguageModel extends SQLiteOpenHelper {
             SQLiteDatabase db,
             int oldVersion,
             int newVersion
-    ) {}
+    ) {
+        if (oldVersion < 2) {
+            // Remove entradas ruins que a v0.2.4 poderia ter aprendido
+            // quando o score ICF foi anexado ao texto da sugestão.
+            db.execSQL("DELETE FROM word_freq WHERE word GLOB '*[0-9,]*'");
+            db.execSQL("DELETE FROM bigram WHERE prev GLOB '*[0-9,]*' OR word GLOB '*[0-9,]*'");
+            db.execSQL("DELETE FROM trigram WHERE prev2 GLOB '*[0-9,]*' OR prev1 GLOB '*[0-9,]*' OR word GLOB '*[0-9,]*'");
+        }
+    }
 
     private String clean(String word) {
         if (word == null) return "";
@@ -88,7 +96,8 @@ public class PersonalLanguageModel extends SQLiteOpenHelper {
         prev1 = clean(prev1);
         prev2 = clean(prev2);
 
-        if (word.length() < 2) {
+        if (word.length() < 2 ||
+                !word.matches("[\\p{L}][\\p{L}'’\\-]{0,47}")) {
             return;
         }
 
