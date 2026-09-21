@@ -1,5 +1,7 @@
 package com.consolekey.android;
 
+import android.content.ClipData;
+import android.content.ClipboardManager;
 import android.content.Context;
 import android.content.Intent;
 import android.content.SharedPreferences;
@@ -19,6 +21,7 @@ import android.view.inputmethod.EditorInfo;
 import android.view.inputmethod.InputConnection;
 
 import java.util.ArrayList;
+import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Locale;
 import java.util.concurrent.ExecutorService;
@@ -66,6 +69,15 @@ public class ConsoleImeService extends InputMethodService
 
     private LocalDictionary dictionary;
     private PersonalLanguageModel personal;
+    private ProperNameLexicon properNames;
+
+    private ClipboardStore clipboardStore;
+    private ClipboardManager clipboardManager;
+    private ClipboardPanelView clipboardPanelView;
+    private boolean sensitiveInput = false;
+
+    private final ClipboardManager.OnPrimaryClipChangedListener clipboardListener =
+            this::captureClipboard;
 
     private String pendingWordNorm = "";
     private LocalDictionary.Correction pendingCorrection;
@@ -90,6 +102,26 @@ public class ConsoleImeService extends InputMethodService
         personal =
                 new PersonalLanguageModel(this);
 
+        properNames =
+                new ProperNameLexicon(this);
+
+        clipboardStore =
+                new ClipboardStore(this);
+
+        clipboardManager =
+                (ClipboardManager)getSystemService(
+                        Context.CLIPBOARD_SERVICE
+                );
+
+        if (clipboardManager != null) {
+            try {
+                clipboardManager.addPrimaryClipChangedListener(
+                        clipboardListener
+                );
+            } catch (Throwable ignored) {}
+        }
+
+        captureClipboard();
         refreshController();
     }
 
@@ -101,6 +133,14 @@ public class ConsoleImeService extends InputMethodService
         mainHandler.removeCallbacks(
                 suggestionRefresh
         );
+
+        if (clipboardManager != null) {
+            try {
+                clipboardManager.removePrimaryClipChangedListener(
+                        clipboardListener
+                );
+            } catch (Throwable ignored) {}
+        }
 
         languageExecutor.shutdownNow();
         hapticExecutor.shutdownNow();
@@ -211,6 +251,11 @@ public class ConsoleImeService extends InputMethodService
         correctionEnabled =
                 canUseCorrection(info);
 
+        sensitiveInput =
+                isSensitiveInput(info);
+
+        clipboardPanelView = null;
+
         pendingWordNorm = "";
         pendingCorrection = null;
 
@@ -252,6 +297,31 @@ public class ConsoleImeService extends InputMethodService
         setInputView(
                 onCreateInputView()
         );
+    }
+
+    private boolean isSensitiveInput(
+            EditorInfo info
+    ) {
+        if (info == null) {
+            return false;
+        }
+
+        if ((info.inputType &
+                InputType.TYPE_MASK_CLASS) !=
+                InputType.TYPE_CLASS_TEXT) {
+            return false;
+        }
+
+        int variation =
+                info.inputType &
+                InputType.TYPE_MASK_VARIATION;
+
+        return variation ==
+                InputType.TYPE_TEXT_VARIATION_PASSWORD ||
+                variation ==
+                InputType.TYPE_TEXT_VARIATION_VISIBLE_PASSWORD ||
+                variation ==
+                InputType.TYPE_TEXT_VARIATION_WEB_PASSWORD;
     }
 
     private boolean canUseCorrection(
@@ -431,6 +501,14 @@ public class ConsoleImeService extends InputMethodService
         InputDevice d =
                 event.getDevice();
 
+        if (clipboardPanelView != null &&
+                clipboardPanelView.handleGamepadKey(
+                        keyCode,
+                        event
+                )) {
+            return true;
+        }
+
         if (ControllerDetector.isGamepad(d)) {
             activeControllerId =
                     d.getId();
@@ -467,6 +545,14 @@ public class ConsoleImeService extends InputMethodService
     ) {
         InputDevice d =
                 event.getDevice();
+
+        if (clipboardPanelView != null &&
+                clipboardPanelView.handleGamepadKey(
+                        keyCode,
+                        event
+                )) {
+            return true;
+        }
 
         if (ControllerDetector.isGamepad(d) &&
                 keyboardView instanceof ConsoleKeyboardView) {
@@ -631,6 +717,74 @@ public class ConsoleImeService extends InputMethodService
                 prev2,
                 prev1
         };
+    }
+
+    private String[] mergeSuggestionSources(
+            String current,
+            String[] dictionaryValues,
+            String[] properValues,
+            int limit
+    ) {
+        LinkedHashSet<String> out =
+                new LinkedHashSet<>();
+
+        boolean strongProper =
+                properValues != null &&
+                properValues.length > 0 &&
+                properNames != null &&
+                properNames.isStrongPrefix(
+                        current,
+                        properValues[0]
+                );
+
+        if (strongProper) {
+            out.add(properValues[0]);
+        }
+
+        if (dictionaryValues != null) {
+            for (String value : dictionaryValues) {
+                if (value == null ||
+                        value.isEmpty()) {
+                    continue;
+                }
+
+                out.add(value);
+
+                if (out.size() >= limit) {
+                    break;
+                }
+            }
+        }
+
+        if (properValues != null) {
+            for (String value : properValues) {
+                if (value == null ||
+                        value.isEmpty()) {
+                    continue;
+                }
+
+                out.add(value);
+
+                if (out.size() >= limit) {
+                    break;
+                }
+            }
+        }
+
+        List<String> result =
+                new ArrayList<>(out);
+
+        if (result.size() > limit) {
+            result =
+                    result.subList(
+                            0,
+                            limit
+                    );
+        }
+
+        return result.toArray(
+                new String[0]
+        );
     }
 
     private String matchCase(
@@ -1035,6 +1189,136 @@ public class ConsoleImeService extends InputMethodService
         scheduleSuggestionRefresh();
     }
 
+    private void captureClipboard() {
+        if (clipboardManager == null ||
+                clipboardStore == null ||
+                sensitiveInput) {
+            return;
+        }
+
+        try {
+            if (!clipboardManager.hasPrimaryClip()) {
+                return;
+            }
+
+            ClipData clip =
+                    clipboardManager.getPrimaryClip();
+
+            if (clip == null ||
+                    clip.getItemCount() == 0) {
+                return;
+            }
+
+            CharSequence value =
+                    clip.getItemAt(0)
+                            .coerceToText(this);
+
+            if (value == null) {
+                return;
+            }
+
+            String text =
+                    value.toString();
+
+            if (text.trim().isEmpty()) {
+                return;
+            }
+
+            clipboardStore.add(text);
+
+            if (clipboardPanelView != null) {
+                clipboardPanelView.setItems(
+                        clipboardStore.getAll()
+                );
+            }
+        } catch (Throwable ignored) {}
+    }
+
+    private void showClipboardPanel() {
+        captureClipboard();
+
+        clipboardPanelView =
+                new ClipboardPanelView(
+                        this,
+                        new ClipboardPanelView.Listener() {
+                            @Override public void onPaste(
+                                    String text
+                            ) {
+                                InputConnection c = ic();
+
+                                if (c != null &&
+                                        text != null) {
+                                    c.commitText(
+                                            text,
+                                            1
+                                    );
+
+                                    onKeyFeedback();
+                                }
+                            }
+
+                            @Override public void onClose() {
+                                clipboardPanelView = null;
+
+                                setInputView(
+                                        onCreateInputView()
+                                );
+
+                                if (correctionEnabled) {
+                                    scheduleSuggestionRefresh();
+                                }
+                            }
+
+                            @Override public void onClear() {
+                                if (clipboardStore != null) {
+                                    clipboardStore.clear();
+                                }
+
+                                try {
+                                    if (clipboardManager != null) {
+                                        if (Build.VERSION.SDK_INT >= 28) {
+                                            clipboardManager.clearPrimaryClip();
+                                        } else {
+                                            clipboardManager.setPrimaryClip(
+                                                    ClipData.newPlainText(
+                                                            "",
+                                                            ""
+                                                    )
+                                            );
+                                        }
+                                    }
+                                } catch (Throwable ignored) {}
+
+                                if (clipboardPanelView != null) {
+                                    clipboardPanelView.setItems(
+                                            clipboardStore == null
+                                                    ? new ArrayList<>()
+                                                    : clipboardStore.getAll()
+                                    );
+                                }
+                            }
+                        }
+                );
+
+        clipboardPanelView.setFixedHeightDp(
+                preferredHeightDp()
+        );
+
+        clipboardPanelView.setItems(
+                clipboardStore == null
+                        ? new ArrayList<>()
+                        : clipboardStore.getAll()
+        );
+
+        setInputView(
+                clipboardPanelView
+        );
+    }
+
+    @Override public void onOpenClipboard() {
+        showClipboardPanel();
+    }
+
     @Override public void onHide() {
         requestHideSelf(0);
     }
@@ -1089,10 +1373,26 @@ public class ConsoleImeService extends InputMethodService
                             null;
 
                     if (current.length() >= 1) {
-                        suggestions =
+                        String[] dictionaryValues =
                                 dictionary.suggest(
                                         current,
                                         personal,
+                                        6
+                                );
+
+                        String[] properValues =
+                                properNames == null
+                                        ? new String[0]
+                                        : properNames.suggest(
+                                                current,
+                                                4
+                                        );
+
+                        suggestions =
+                                mergeSuggestionSources(
+                                        current,
+                                        dictionaryValues,
+                                        properValues,
                                         3
                                 );
 
@@ -1101,6 +1401,23 @@ public class ConsoleImeService extends InputMethodService
                                         current,
                                         personal
                                 );
+
+                        if (correction == null &&
+                                properNames != null) {
+                            String properCorrection =
+                                    properNames.bestCorrection(
+                                            current
+                                    );
+
+                            if (properCorrection != null) {
+                                correction =
+                                        new LocalDictionary.Correction(
+                                                properCorrection,
+                                                1,
+                                                false
+                                        );
+                            }
+                        }
                     } else if (current.isEmpty()) {
                         suggestions =
                                 personal.predictNext(

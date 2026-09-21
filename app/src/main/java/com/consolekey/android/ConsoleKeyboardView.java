@@ -127,7 +127,8 @@ public class ConsoleKeyboardView extends BaseKeyboardView {
             List<Key> bottom = new ArrayList<>();
             bottom.add(k("⇧", null, 1.0f, ACT_SHIFT));
             bottom.add(k("@#:", null, 1.0f, ACT_SYMBOLS));
-            bottom.add(k("SPACE", null, 4.8f, ACT_SPACE));
+            bottom.add(k("CLIP", null, 0.9f, ACT_CLIPBOARD));
+            bottom.add(k("SPACE", null, 4.1f, ACT_SPACE));
             bottom.add(kRepeat("⌫", null, 1.2f, ACT_BACKSPACE));
             bottom.add(k("DONE", null, 1.5f, ACT_ENTER));
             rows.add(bottom);
@@ -146,7 +147,8 @@ public class ConsoleKeyboardView extends BaseKeyboardView {
 
             List<Key> bottom = new ArrayList<>();
             bottom.add(k("ABC", null, 1.0f, ACT_SYMBOLS));
-            bottom.add(k("SPACE", null, 5.2f, ACT_SPACE));
+            bottom.add(k("CLIP", null, 0.9f, ACT_CLIPBOARD));
+            bottom.add(k("SPACE", null, 4.5f, ACT_SPACE));
             bottom.add(kRepeat("⌫", null, 1.2f, ACT_BACKSPACE));
             bottom.add(k("DONE", null, 1.5f, ACT_ENTER));
             rows.add(bottom);
@@ -165,7 +167,8 @@ public class ConsoleKeyboardView extends BaseKeyboardView {
 
             List<Key> bottom = new ArrayList<>();
             bottom.add(k("ABC", null, 1.0f, ACT_SYMBOLS));
-            bottom.add(k("SPACE", null, 5.2f, ACT_SPACE));
+            bottom.add(k("CLIP", null, 0.9f, ACT_CLIPBOARD));
+            bottom.add(k("SPACE", null, 4.5f, ACT_SPACE));
             bottom.add(kRepeat("⌫", null, 1.2f, ACT_BACKSPACE));
             bottom.add(k("DONE", null, 1.5f, ACT_ENTER));
             rows.add(bottom);

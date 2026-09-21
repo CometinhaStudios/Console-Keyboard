@@ -23,6 +23,7 @@ public abstract class BaseKeyboardView extends View {
         void onOpenSettings();
         void onReplaceLast(String oldText, String newText);
         void onSuggestionSelected(String suggestion);
+        void onOpenClipboard();
     }
 
     protected static class Key {
@@ -94,7 +95,7 @@ public abstract class BaseKeyboardView extends View {
     private final SparseArray<FastTouchState> fastTouches = new SparseArray<>();
     private int fastPopupPointerId = -1;
 
-    public static final int ACT_TEXT=0, ACT_BACKSPACE=1, ACT_ENTER=2, ACT_SPACE=3, ACT_SHIFT=4, ACT_SYMBOLS=5, ACT_HIDE=6, ACT_EMOJI=7, ACT_SUGGESTION=8;
+    public static final int ACT_TEXT=0, ACT_BACKSPACE=1, ACT_ENTER=2, ACT_SPACE=3, ACT_SHIFT=4, ACT_SYMBOLS=5, ACT_HIDE=6, ACT_EMOJI=7, ACT_SUGGESTION=8, ACT_CLIPBOARD=9;
 
     public BaseKeyboardView(Context c, Listener l) {
         super(c);
@@ -213,6 +214,9 @@ public abstract class BaseKeyboardView extends View {
             case ACT_HIDE: listener.onHide(); break;
             case ACT_SUGGESTION:
                 if (key.value != null) listener.onSuggestionSelected(key.value);
+                break;
+            case ACT_CLIPBOARD:
+                listener.onOpenClipboard();
                 break;
             default:
                 if (key.value != null) listener.onText(key.value);

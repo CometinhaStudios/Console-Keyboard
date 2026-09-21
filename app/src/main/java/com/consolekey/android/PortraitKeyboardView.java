@@ -391,10 +391,11 @@ public class PortraitKeyboardView extends BaseKeyboardView {
             rows.add(r4);
 
             List<Key> r5 = new ArrayList<>();
-            r5.add(k("☺", null, 1.15f, ACT_EMOJI));
+            r5.add(k("☺", null, 1.05f, ACT_EMOJI));
+            r5.add(k("📋", null, 1.05f, ACT_CLIPBOARD));
             r5.add(k("!#1", null, 1.35f, ACT_SYMBOLS));
             r5.add(normalKey(","));
-            r5.add(k("Português (BR)", " ", 4.5f, ACT_SPACE));
+            r5.add(k("Português (BR)", " ", 4.15f, ACT_SPACE));
             r5.add(normalKey("."));
             r5.add(k("↵", null, 1.25f, ACT_ENTER));
             rows.add(r5);
@@ -415,9 +416,10 @@ public class PortraitKeyboardView extends BaseKeyboardView {
             rows.add(r4);
 
             List<Key> r5 = new ArrayList<>();
-            r5.add(k("☺", null, 1.15f, ACT_EMOJI));
+            r5.add(k("☺", null, 1.05f, ACT_EMOJI));
+            r5.add(k("📋", null, 1.05f, ACT_CLIPBOARD));
             r5.add(k("ABC", null, 1.35f, ACT_SYMBOLS));
-            r5.add(k("Português (BR)", " ", 4.8f, ACT_SPACE));
+            r5.add(k("Português (BR)", " ", 4.35f, ACT_SPACE));
             r5.add(normalKey("."));
             r5.add(k("↵", null, 1.25f, ACT_ENTER));
             rows.add(r5);
@@ -436,9 +438,10 @@ public class PortraitKeyboardView extends BaseKeyboardView {
             rows.add(r4);
 
             List<Key> r5 = new ArrayList<>();
-            r5.add(k("☺", null, 1.15f, ACT_EMOJI));
+            r5.add(k("☺", null, 1.05f, ACT_EMOJI));
+            r5.add(k("📋", null, 1.05f, ACT_CLIPBOARD));
             r5.add(k("ABC", null, 1.35f, ACT_SYMBOLS));
-            r5.add(k("Português (BR)", " ", 4.8f, ACT_SPACE));
+            r5.add(k("Português (BR)", " ", 4.35f, ACT_SPACE));
             r5.add(normalKey("."));
             r5.add(k("↵", null, 1.25f, ACT_ENTER));
             rows.add(r5);
