@@ -5,6 +5,7 @@ import android.graphics.Canvas;
 import android.graphics.Color;
 import android.graphics.Paint;
 import android.view.KeyEvent;
+import android.view.MotionEvent;
 
 import java.util.ArrayList;
 import java.util.List;
@@ -18,6 +19,13 @@ public class ConsoleKeyboardView extends BaseKeyboardView {
 
     private final Paint hint = new Paint(Paint.ANTI_ALIAS_FLAG);
     private float headerH;
+    private float suggestionH;
+
+    private String[] wordSuggestions = new String[0];
+    private final Paint suggestionBg = new Paint(Paint.ANTI_ALIAS_FLAG);
+    private final Paint suggestionText = new Paint(Paint.ANTI_ALIAS_FLAG);
+    private final Paint suggestionDivider = new Paint(Paint.ANTI_ALIAS_FLAG);
+    private boolean suggestionTouch = false;
 
     public ConsoleKeyboardView(Context c, Listener l) {
         super(c, l);
@@ -26,6 +34,14 @@ public class ConsoleKeyboardView extends BaseKeyboardView {
         gap = dp(4);
         radius = dp(6);
         headerH = dp(28);
+        suggestionH = dp(26);
+
+        suggestionBg.setColor(Color.rgb(10,10,10));
+        suggestionText.setColor(Color.WHITE);
+        suggestionText.setTextAlign(Paint.Align.CENTER);
+        suggestionText.setTextSize(dp(12));
+        suggestionDivider.setColor(Color.rgb(42,42,42));
+        suggestionDivider.setStrokeWidth(dp(1));
 
         hint.setColor(Color.LTGRAY);
         hint.setTextSize(dp(11));
@@ -110,6 +126,67 @@ public class ConsoleKeyboardView extends BaseKeyboardView {
         invalidate();
     }
 
+    public void setSuggestions(String[] values) {
+        wordSuggestions = values == null ? new String[0] : values;
+        invalidate();
+    }
+
+    private void drawWordSuggestions(Canvas c) {
+        float top = headerH;
+        float bottom = headerH + suggestionH;
+        c.drawRect(0, top, getWidth(), bottom, suggestionBg);
+
+        int count = Math.min(3, wordSuggestions.length);
+        if (count <= 0) return;
+
+        float cellW = getWidth() / (float)count;
+        Paint.FontMetrics fm = suggestionText.getFontMetrics();
+        float cy = (top + bottom) * 0.5f - (fm.ascent + fm.descent) * 0.5f;
+
+        for (int i=0; i<count; i++) {
+            String value = wordSuggestions[i] == null ? "" : wordSuggestions[i];
+            c.drawText(value, cellW * (i + 0.5f), cy, suggestionText);
+            if (i > 0) {
+                float x = cellW * i;
+                c.drawLine(x, top + dp(5), x, bottom - dp(5), suggestionDivider);
+            }
+        }
+    }
+
+    private boolean handleWordSuggestionTouch(MotionEvent e) {
+        float top = headerH;
+        float bottom = headerH + suggestionH;
+        float y = e.getY();
+
+        if (e.getActionMasked() == MotionEvent.ACTION_DOWN && y >= top && y < bottom) {
+            suggestionTouch = true;
+            int count = Math.min(3, wordSuggestions.length);
+            if (count > 0) {
+                float cellW = getWidth() / (float)count;
+                int index = Math.max(0, Math.min(count - 1, (int)(e.getX() / cellW)));
+                String value = wordSuggestions[index];
+                if (value != null && !value.isEmpty()) {
+                    listener.onSuggestionSelected(value);
+                    feedbackAsync();
+                }
+            }
+            return true;
+        }
+
+        if (suggestionTouch) {
+            if (e.getActionMasked() == MotionEvent.ACTION_UP || e.getActionMasked() == MotionEvent.ACTION_CANCEL) {
+                suggestionTouch = false;
+            }
+            return true;
+        }
+        return false;
+    }
+
+    @Override public boolean onTouchEvent(MotionEvent e) {
+        if (handleWordSuggestionTouch(e)) return true;
+        return super.onTouchEvent(e);
+    }
+
     private String badge(String action) {
         if (family == ControllerDetector.Family.PLAYSTATION) {
             switch (action) {
@@ -174,7 +251,8 @@ public class ConsoleKeyboardView extends BaseKeyboardView {
                 hint
         );
 
-        layoutRows(headerH, getHeight() - dp(7));
+        drawWordSuggestions(c);
+        layoutRows(headerH + suggestionH + dp(2), getHeight() - dp(7));
 
         for (int r=0; r<rows.size(); r++) {
             for (int col=0; col<rows.get(r).size(); col++) {

@@ -37,6 +37,13 @@ public class PortraitKeyboardView extends BaseKeyboardView {
     private float toolbarH;
     private float emojiModeBarH;
     private float emojiCategoryBarH;
+    private float suggestionH;
+
+    private String[] wordSuggestions = new String[0];
+    private final Paint suggestionBg = new Paint(Paint.ANTI_ALIAS_FLAG);
+    private final Paint suggestionText = new Paint(Paint.ANTI_ALIAS_FLAG);
+    private final Paint suggestionDivider = new Paint(Paint.ANTI_ALIAS_FLAG);
+    private boolean suggestionTouch = false;
 
     private final OverScroller emojiScroller;
     private VelocityTracker emojiVelocity;
@@ -70,6 +77,14 @@ public class PortraitKeyboardView extends BaseKeyboardView {
         toolbarH = dp(40);
         emojiModeBarH = dp(46);
         emojiCategoryBarH = dp(42);
+        suggestionH = dp(30);
+
+        suggestionBg.setColor(Color.rgb(10,10,10));
+        suggestionText.setColor(Color.WHITE);
+        suggestionText.setTextAlign(Paint.Align.CENTER);
+        suggestionText.setTextSize(dp(14));
+        suggestionDivider.setColor(Color.rgb(42,42,42));
+        suggestionDivider.setStrokeWidth(dp(1));
 
         toolbar.setColor(Color.WHITE);
         toolbar.setTextAlign(Paint.Align.CENTER);
@@ -101,6 +116,64 @@ public class PortraitKeyboardView extends BaseKeyboardView {
         emojiTouchSlop = ViewConfiguration.get(c).getScaledTouchSlop();
 
         rebuild();
+    }
+
+    public void setSuggestions(String[] values) {
+        wordSuggestions = values == null ? new String[0] : values;
+        invalidate();
+    }
+
+    private void drawWordSuggestions(Canvas c) {
+        float top = toolbarH;
+        float bottom = toolbarH + suggestionH;
+        c.drawRect(0, top, getWidth(), bottom, suggestionBg);
+
+        int count = Math.min(3, wordSuggestions.length);
+        if (count <= 0) return;
+
+        float cellW = getWidth() / (float)count;
+        Paint.FontMetrics fm = suggestionText.getFontMetrics();
+        float cy = (top + bottom) * 0.5f - (fm.ascent + fm.descent) * 0.5f;
+
+        for (int i=0; i<count; i++) {
+            String value = wordSuggestions[i] == null ? "" : wordSuggestions[i];
+            c.drawText(value, cellW * (i + 0.5f), cy, suggestionText);
+            if (i > 0) {
+                float x = cellW * i;
+                c.drawLine(x, top + dp(7), x, bottom - dp(7), suggestionDivider);
+            }
+        }
+    }
+
+    private boolean handleWordSuggestionTouch(MotionEvent e) {
+        if (emojiMode) return false;
+
+        float top = toolbarH;
+        float bottom = toolbarH + suggestionH;
+        float y = e.getY();
+
+        if (e.getActionMasked() == MotionEvent.ACTION_DOWN && y >= top && y < bottom) {
+            suggestionTouch = true;
+            int count = Math.min(3, wordSuggestions.length);
+            if (count > 0) {
+                float cellW = getWidth() / (float)count;
+                int index = Math.max(0, Math.min(count - 1, (int)(e.getX() / cellW)));
+                String value = wordSuggestions[index];
+                if (value != null && !value.isEmpty()) {
+                    listener.onSuggestionSelected(value);
+                    feedbackAsync();
+                }
+            }
+            return true;
+        }
+
+        if (suggestionTouch) {
+            if (e.getActionMasked() == MotionEvent.ACTION_UP || e.getActionMasked() == MotionEvent.ACTION_CANCEL) {
+                suggestionTouch = false;
+            }
+            return true;
+        }
+        return false;
     }
 
     @Override protected boolean fastTouchMode() {
@@ -392,7 +465,8 @@ public class PortraitKeyboardView extends BaseKeyboardView {
             c.drawText(icons[i], segment * (i + .5f), dp(27), toolbar);
         }
 
-        layoutRows(toolbarH + dp(6), getHeight() - dp(6));
+        drawWordSuggestions(c);
+        layoutRows(toolbarH + suggestionH + dp(5), getHeight() - dp(6));
 
         for (List<Key> row : rows) {
             for (Key key : row) {
@@ -744,6 +818,7 @@ public class PortraitKeyboardView extends BaseKeyboardView {
     }
 
     @Override public boolean onTouchEvent(MotionEvent e) {
+        if (handleWordSuggestionTouch(e)) return true;
         if (!emojiMode && e.getY() < toolbarH) {
             if (e.getActionMasked() == MotionEvent.ACTION_UP) {
                 float seg = getWidth() / 5f;

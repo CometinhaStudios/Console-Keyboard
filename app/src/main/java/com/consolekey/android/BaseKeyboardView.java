@@ -22,6 +22,7 @@ public abstract class BaseKeyboardView extends View {
         void onKeyFeedback();
         void onOpenSettings();
         void onReplaceLast(String oldText, String newText);
+        void onSuggestionSelected(String suggestion);
     }
 
     protected static class Key {
