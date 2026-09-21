@@ -5459,6 +5459,7 @@ embruxado	18.491208	embruxado
 embruxador	22.176233	embruxador
 embruxamento	19.361285	embruxamento
 embruxar	19.691327	embruxar
+embu-guacu	30.000000	Embu-Guaçu
 embua	18.316314	embuá
 embuaba	21.696660	embuaba
 embuava	21.796744	embuava
@@ -19369,6 +19370,7 @@ entraviscar	22.102125	entraviscar
 entravo	20.384474	entravo
 entravou	19.165234	entravou
 entre	6.727527	entre
+entre-ijuis	30.000000	Entre-Ijuís
 entreaberta	14.459224	entreaberta
 entreaberto	16.440406	entreaberto
 entreabra	19.912869	entreabra

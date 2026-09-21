@@ -4624,6 +4624,7 @@ paripiranga	15.808574	paripiranga
 paripiranguense	20.934520	paripiranguense
 paripueira	15.519408	paripueira
 paripueirense	22.176233	paripueirense
+pariquera-acu	30.000000	Pariquera-Açu
 pariquerense	21.745451	pariquerense
 pariqui	21.605688	pariqui
 pariquis	17.532582	pariquis
@@ -7945,6 +7946,7 @@ peixao	15.731369	peixão
 peixar	20.912541	peixar
 peixaria	14.586158	peixaria
 peixe	10.088841	peixe
+peixe-boi	30.000000	Peixe-Boi
 peixeira	14.726601	peixeira
 peixeirada	16.562825	peixeirada
 peixeiro	15.286172	peixeiro
@@ -14913,6 +14915,7 @@ pindaiva	20.551528	pindaíva
 pindamonhangaba	13.261318	pindamonhangaba
 pindamonhangabense	18.429448	pindamonhangabense
 pindapoia	22.176233	pindapoia
+pindare-mirim	30.000000	Pindaré-Mirim
 pindareense	20.450723	pindareense
 pindaricamente	22.661741	pindaricamente
 pindarico	20.598048	pindárico
@@ -15027,6 +15030,7 @@ pingaveis	22.661741	pingáveis
 pingemoiro	22.033133	pingemoiro
 pingente	12.016477	pingente
 pingo	12.228630	pingo
+pingo-d'agua	30.000000	Pingo-d'Água
 pingoe	22.102125	pingoé
 pingola	18.083172	pingola
 pingolada	20.031652	pingolada

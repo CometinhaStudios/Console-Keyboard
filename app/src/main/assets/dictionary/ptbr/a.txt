@@ -38197,6 +38197,7 @@ apicultor	15.096077	apicultor
 apicultura	13.889402	apicultura
 apicultural	20.869982	apicultural
 apicum	15.588895	apicum
+apicum-acu	30.000000	Apicum-Açu
 apidas	21.445346	ápidas
 apideo	21.968594	apídeo
 apidose	23.642570	apidose
@@ -42597,6 +42598,7 @@ arciprestalidade	23.642570	arciprestalidade
 arcipreste	16.161954	arcipreste
 arcitenente	21.563129	arcitenente
 arco	10.574974	arco
+arco-iris	30.000000	Arco-Íris
 arcobalista	22.176233	arcobalista
 arcobalistario	24.741183	arcobalistário
 arcobalistico	24.741183	arcobalístico

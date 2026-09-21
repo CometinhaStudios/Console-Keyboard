@@ -1411,6 +1411,7 @@ jetuca	21.185835	jetuca
 jetucu	22.033133	jetucu
 jevura	21.796744	jevura
 ji	12.492290	ji
+ji-parana	30.000000	Ji-Paraná
 jia	14.801990	jia
 jiacotim	21.650140	jiacotim
 jiade	19.135381	jiade

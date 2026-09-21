@@ -13,7 +13,7 @@ public class PersonalLanguageModel extends SQLiteOpenHelper {
     private static final String DB_NAME =
             "console_keyboard_language.db";
 
-    private static final int DB_VERSION = 2;
+    private static final int DB_VERSION = 3;
 
     private final Locale pt =
             new Locale("pt", "BR");

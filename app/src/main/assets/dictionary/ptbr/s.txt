@@ -3497,6 +3497,7 @@ sapu	17.953338	sapu
 sapua	22.256276	sapuá
 sapucaeira	18.422215	sapucaeira
 sapucai	12.888547	sapucaí
+sapucai-mirim	30.000000	Sapucaí-Mirim
 sapucaia	13.136836	sapucaia
 sapucaiamirim	24.741183	sapucaiamirim
 sapucaieira	19.413307	sapucaieira
@@ -6109,6 +6110,7 @@ selvicola	19.778338	selvícola
 selviria	16.241136	selvíria
 selvoso	20.770891	selvoso
 sem	6.452280	sem
+sem-peixe	30.000000	Sem-Peixe
 sema	13.541791	sema
 semafora	19.131711	semáfora
 semaforico	16.934486	semafórico

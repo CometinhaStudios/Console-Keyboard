@@ -7837,6 +7837,7 @@ granzal	21.563129	granzal
 granzerita	22.438598	granzerita
 granzosa	22.543958	granzosa
 grao	11.326375	grão
+grao-para	30.000000	Grão-Pará
 graozeiro	22.102125	grãozeiro
 graozinho	15.871222	grãozinho
 grapa	17.496241	grapa
@@ -9051,6 +9052,7 @@ guajabara	21.445346	guajabara
 guajajara	15.648500	guajajara
 guajajaras	15.525855	guajajaras
 guajara	13.841503	guajará
+guajara-mirim	30.000000	Guajará-Mirim
 guajaraba	21.850811	guajaraba
 guajaraense	21.185835	guajaraense
 guajarai	21.696660	guajaraí
@@ -9347,6 +9349,7 @@ guaraxaim	19.131711	guaraxaim
 guaraxim	21.563129	guaraxim
 guaraz	21.052303	guaraz
 guarda	9.453527	guarda
+guarda-mor	30.000000	Guarda-Mor
 guardadas	12.626064	guardadas
 guardadeira	21.745451	guardadeira
 guardadeiro	21.696660	guardadeiro
@@ -10022,6 +10025,7 @@ guinde	21.027611	guinde
 guindia	22.795273	guíndia
 guindola	21.307195	guindola
 guine	11.651076	guiné
+guine-bissau	28.000000	Guiné-Bissau
 guineano	18.386813	guineano
 guineense	13.925131	guineense
 guineensidade	22.543958	guineensidade

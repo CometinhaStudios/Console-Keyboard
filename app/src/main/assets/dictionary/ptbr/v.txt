@@ -1663,6 +1663,7 @@ varras	20.040702	varras
 varrasco	18.717735	varrasco
 varrasquete	22.438598	varrasquete
 varre	13.933497	varre
+varre-sai	30.000000	Varre-Sai
 varredeira	16.753319	varredeira
 varredeiras	17.307516	varredeiras
 varredeiro	22.176233	varredeiro
@@ -3003,6 +3004,7 @@ venezuelano	12.956819	venezuelano
 vengue	22.795273	venguê
 vengue	23.131745	vengué
 venha	9.726516	venha
+venha-ver	30.000000	Venha-Ver
 venhais	17.063782	venhais
 venham	10.965283	venham
 venhamos	13.884802	venhamos

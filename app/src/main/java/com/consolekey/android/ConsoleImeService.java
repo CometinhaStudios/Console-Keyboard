@@ -1054,9 +1054,8 @@ public class ConsoleImeService extends InputMethodService
             return;
         }
 
-        mainHandler.postDelayed(
-                suggestionRefresh,
-                24
+        mainHandler.post(
+                suggestionRefresh
         );
     }
 
@@ -1089,7 +1088,7 @@ public class ConsoleImeService extends InputMethodService
                     LocalDictionary.Correction correction =
                             null;
 
-                    if (current.length() >= 2) {
+                    if (current.length() >= 1) {
                         suggestions =
                                 dictionary.suggest(
                                         current,

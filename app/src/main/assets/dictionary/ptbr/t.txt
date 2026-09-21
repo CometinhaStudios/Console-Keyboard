@@ -7462,6 +7462,7 @@ timonense	17.644461	timonense
 timopatia	22.438598	timopatia
 timopsiquia	22.176233	timopsiquia
 timor	12.237431	timor
+timor-leste	28.000000	Timor-Leste
 timoratamente	20.891035	timoratamente
 timoratas	19.196005	timoratas
 timorato	17.810688	timorato
@@ -9119,6 +9120,7 @@ tombos	13.803888	tombos
 tombou	13.842464	tombou
 tome	10.928198	tome
 tome	11.780689	tomé
+tome-acu	30.000000	Tomé-Açu
 tomei	11.133869	tomei
 tomeis	16.856983	tomeis
 tomelista	21.796744	tomelista

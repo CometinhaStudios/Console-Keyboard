@@ -3110,6 +3110,7 @@ olhizarco	20.770891	olhizarco
 olho	9.650612	olho
 olhometro	15.664260	olhômetro
 olhos	8.560619	olhos
+olhos-d'agua	30.000000	Olhos-d'Água
 olhou	11.045232	olhou
 olhudo	18.087030	olhudo
 olibano	15.974633	olíbano

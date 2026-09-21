@@ -83,6 +83,7 @@ xandangas	22.795273	xandangas
 xanduca	20.521675	xanduca
 xango	13.230049	xangô
 xango	18.273484	xangó
+xangri-la	30.000000	Xangri-lá
 xangrilaense	24.741183	xangrilaense
 xaninha	13.835649	xaninha
 xantacao	22.176233	xantação
@@ -872,6 +873,7 @@ xipinaua	22.661741	xipinaua
 xipo	20.068354	xipo
 xipoca	20.979983	xipoca
 xiputa	23.642570	xiputa
+xique-xique	30.000000	Xique-Xique
 xiquexique	16.625662	xiquexique
 xiquexiquense	17.866984	xiquexiquense
 xiquimato	21.244675	xiquimato

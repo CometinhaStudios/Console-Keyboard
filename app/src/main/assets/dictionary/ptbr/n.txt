@@ -612,6 +612,7 @@ nanuque	15.162664	nanuque
 nanuquense	19.987593	nanuquense
 nanzuque	21.214822	nanzuque
 nao	4.846307	não
+nao-me-toque	30.000000	Não-Me-Toque
 napa	13.504947	napa
 napaceo	21.445346	napáceo
 napalm	14.705221	napalm

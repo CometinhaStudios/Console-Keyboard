@@ -9,9 +9,11 @@ import java.text.Normalizer;
 import java.util.ArrayList;
 import java.util.Collections;
 import java.util.Comparator;
+import java.util.HashMap;
 import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Locale;
+import java.util.Map;
 import java.util.Set;
 
 public class LocalDictionary {
@@ -40,19 +42,25 @@ public class LocalDictionary {
     }
 
     private static class Ranked {
-        final String word;
+        final Entry entry;
         final double rank;
 
-        Ranked(String word, double rank) {
-            this.word = word;
+        Ranked(Entry entry, double rank) {
+            this.entry = entry;
             this.rank = rank;
         }
     }
 
     private final Context context;
 
-    private final LruCache<String, List<Entry>> cache =
-            new LruCache<String, List<Entry>>(8);
+    private final LruCache<String, List<Entry>> bucketCache =
+            new LruCache<String, List<Entry>>(10);
+
+    private final Map<String, List<Entry>> oneLetterTop =
+            new HashMap<>();
+
+    private final char[] alphabet =
+            "abcdefghijklmnopqrstuvwxyz".toCharArray();
 
     public LocalDictionary(Context context) {
         this.context = context.getApplicationContext();
@@ -98,14 +106,15 @@ public class LocalDictionary {
         }
 
         char first = normalized.charAt(0);
+
         if (first < 'a' || first > 'z') {
             return Collections.emptyList();
         }
 
         String key = String.valueOf(first);
 
-        synchronized (cache) {
-            List<Entry> found = cache.get(key);
+        synchronized (bucketCache) {
+            List<Entry> found = bucketCache.get(key);
             if (found != null) return found;
         }
 
@@ -116,7 +125,9 @@ public class LocalDictionary {
                         new BufferedReader(
                                 new InputStreamReader(
                                         context.getAssets().open(
-                                                "dictionary/ptbr/" + key + ".txt"
+                                                "dictionary/ptbr/" +
+                                                key +
+                                                ".txt"
                                         ),
                                         "UTF-8"
                                 )
@@ -129,6 +140,7 @@ public class LocalDictionary {
                 if (parts.length < 3) continue;
 
                 double score;
+
                 try {
                     score = Double.parseDouble(parts[1]);
                 } catch (Throwable ignored) {
@@ -137,13 +149,7 @@ public class LocalDictionary {
 
                 String word = parts[2].trim();
 
-                // Defesa contra corpus mal formatado: nunca deixa score/CSV
-                // aparecer como parte da sugestão.
-                word = word.replaceFirst(
-                        ",[-+]?\\d+(?:\\.\\d+)?$",
-                        ""
-                );
-
+                // Nunca deixa lixo do CSV/score virar sugestão.
                 if (!word.matches("[\\p{L}][\\p{L}'’\\-]{0,47}")) {
                     continue;
                 }
@@ -158,21 +164,24 @@ public class LocalDictionary {
             }
         } catch (Throwable ignored) {}
 
-        synchronized (cache) {
-            cache.put(key, loaded);
+        synchronized (bucketCache) {
+            bucketCache.put(key, loaded);
         }
 
         return loaded;
     }
 
-    private int lowerBound(List<Entry> list, String prefix) {
+    private int lowerBound(
+            List<Entry> list,
+            String value
+    ) {
         int lo = 0;
         int hi = list.size();
 
         while (lo < hi) {
             int mid = (lo + hi) >>> 1;
 
-            if (list.get(mid).norm.compareTo(prefix) < 0) {
+            if (list.get(mid).norm.compareTo(value) < 0) {
                 lo = mid + 1;
             } else {
                 hi = mid;
@@ -182,24 +191,122 @@ public class LocalDictionary {
         return lo;
     }
 
-    public boolean contains(String word, PersonalLanguageModel personal) {
-        if (word == null || word.isEmpty()) return false;
+    private void insertTop(
+            List<Entry> top,
+            Entry candidate,
+            int limit
+    ) {
+        int pos = 0;
 
-        if (personal != null && personal.wordCount(word) >= 3) {
-            return true;
+        while (pos < top.size() &&
+                top.get(pos).score <= candidate.score) {
+            pos++;
         }
 
-        String norm = normalize(word);
-        List<Entry> list = bucket(norm);
-        if (list.isEmpty()) return false;
+        top.add(pos, candidate);
 
-        int start = lowerBound(list, norm);
+        if (top.size() > limit) {
+            top.remove(top.size() - 1);
+        }
+    }
+
+    private List<Entry> prefixBase(
+            String prefix,
+            int limit
+    ) {
+        List<Entry> list = bucket(prefix);
+
+        if (list.isEmpty()) {
+            return Collections.emptyList();
+        }
+
+        if (prefix.length() == 1) {
+            synchronized (oneLetterTop) {
+                List<Entry> cached =
+                        oneLetterTop.get(prefix);
+
+                if (cached != null) {
+                    return cached;
+                }
+            }
+
+            List<Entry> top = new ArrayList<>();
+
+            for (Entry e : list) {
+                // Evita sugerir abreviações muito curtas logo na 1ª letra.
+                if (e.word.length() < 2) continue;
+                insertTop(top, e, Math.max(limit, 48));
+            }
+
+            synchronized (oneLetterTop) {
+                oneLetterTop.put(prefix, top);
+            }
+
+            return top;
+        }
+
+        int start = lowerBound(list, prefix);
+        List<Entry> top = new ArrayList<>();
 
         for (int i=start; i<list.size(); i++) {
             Entry e = list.get(i);
 
-            if (!e.norm.equals(norm)) break;
+            if (!e.norm.startsWith(prefix)) {
+                break;
+            }
 
+            if (e.norm.length() >
+                    prefix.length() + 16) {
+                continue;
+            }
+
+            insertTop(top, e, Math.max(limit, 40));
+        }
+
+        return top;
+    }
+
+    private List<Entry> exactNormalized(
+            String norm
+    ) {
+        List<Entry> list = bucket(norm);
+
+        if (list.isEmpty()) {
+            return Collections.emptyList();
+        }
+
+        int start = lowerBound(list, norm);
+        List<Entry> out = new ArrayList<>();
+
+        for (int i=start; i<list.size(); i++) {
+            Entry e = list.get(i);
+
+            if (!e.norm.equals(norm)) {
+                break;
+            }
+
+            out.add(e);
+        }
+
+        return out;
+    }
+
+    public boolean contains(
+            String word,
+            PersonalLanguageModel personal
+    ) {
+        if (word == null || word.isEmpty()) {
+            return false;
+        }
+
+        if (personal != null &&
+                personal.wordCount(word) >= 3) {
+            return true;
+        }
+
+        String norm = normalize(word);
+
+        for (Entry e : exactNormalized(norm)) {
             if (e.word.equalsIgnoreCase(word)) {
                 return true;
             }
@@ -208,118 +315,35 @@ public class LocalDictionary {
         return false;
     }
 
-    public String[] suggest(
-            String typed,
-            PersonalLanguageModel personal,
-            int limit
+    private double personalRank(
+            Entry e,
+            PersonalLanguageModel personal
     ) {
-        if (typed == null || typed.length() < 2 || limit <= 0) {
-            return new String[0];
-        }
+        int personalCount =
+                personal == null
+                        ? 0
+                        : personal.wordCount(e.word);
 
-        String prefix = normalize(typed);
-        if (prefix.length() < 2) return new String[0];
-
-        List<Entry> list = bucket(prefix);
-        if (list.isEmpty()) return new String[0];
-
-        List<Ranked> ranked = new ArrayList<>();
-        int start = lowerBound(list, prefix);
-
-        for (int i=start; i<list.size(); i++) {
-            Entry e = list.get(i);
-
-            if (!e.norm.startsWith(prefix)) break;
-            if (e.norm.length() > prefix.length() + 12) continue;
-
-            int personalCount =
-                    personal == null ? 0 : personal.wordCount(e.word);
-
-            double rank =
-                    e.score -
-                    Math.log1p(personalCount) * 3.0;
-
-            ranked.add(new Ranked(e.word, rank));
-
-            if (ranked.size() >= 400) break;
-        }
-
-        Collections.sort(
-                ranked,
-                Comparator.comparingDouble(a -> a.rank)
-        );
-
-        Set<String> unique = new LinkedHashSet<>();
-
-        if (contains(typed, personal)) {
-            unique.add(typed);
-        }
-
-        for (Ranked r : ranked) {
-            unique.add(r.word);
-            if (unique.size() >= limit) break;
-        }
-
-        if (unique.size() < limit) {
-            for (String c : correctionSuggestions(
-                    typed,
-                    personal,
-                    limit
-            )) {
-                unique.add(c);
-                if (unique.size() >= limit) break;
-            }
-        }
-
-        return unique.toArray(new String[0]);
+        return e.score -
+                Math.log1p(personalCount) * 8.0;
     }
 
-    public String[] correctionSuggestions(
-            String typed,
+    private List<Entry> rerankPersonal(
+            List<Entry> base,
             PersonalLanguageModel personal,
             int limit
     ) {
-        if (typed == null || typed.length() < 2) {
-            return new String[0];
-        }
-
-        String norm = normalize(typed);
-        if (norm.isEmpty()) return new String[0];
-
-        List<Entry> list = bucket(norm);
-        if (list.isEmpty()) return new String[0];
-
         List<Ranked> ranked = new ArrayList<>();
 
-        int maxDistance =
-                norm.length() >= 6 ? 2 : 1;
+        int count = Math.min(base.size(), 30);
 
-        for (Entry e : list) {
-            if (Math.abs(e.norm.length() - norm.length()) > maxDistance) {
-                continue;
-            }
-
-            int distance =
-                    damerauDistance(
-                            norm,
-                            e.norm,
-                            maxDistance
-                    );
-
-            if (distance > maxDistance) continue;
-
-            int personalCount =
-                    personal == null ? 0 : personal.wordCount(e.word);
-
-            double rank =
-                    distance * 1000.0 +
-                    e.score -
-                    Math.log1p(personalCount) * 10.0;
+        for (int i=0; i<count; i++) {
+            Entry e = base.get(i);
 
             ranked.add(
                     new Ranked(
-                            e.word,
-                            rank
+                            e,
+                            personalRank(e, personal)
                     )
             );
         }
@@ -329,138 +353,343 @@ public class LocalDictionary {
                 Comparator.comparingDouble(a -> a.rank)
         );
 
-        Set<String> unique = new LinkedHashSet<>();
+        List<Entry> out = new ArrayList<>();
 
         for (Ranked r : ranked) {
-            unique.add(r.word);
-            if (unique.size() >= limit) break;
+            out.add(r.entry);
+
+            if (out.size() >= limit) {
+                break;
+            }
         }
 
-        return unique.toArray(new String[0]);
+        return out;
+    }
+
+    public String[] suggest(
+            String typed,
+            PersonalLanguageModel personal,
+            int limit
+    ) {
+        if (typed == null ||
+                typed.isEmpty() ||
+                limit <= 0) {
+            return new String[0];
+        }
+
+        String prefix = normalize(typed);
+
+        if (prefix.isEmpty()) {
+            return new String[0];
+        }
+
+        LinkedHashSet<String> out =
+                new LinkedHashSet<>();
+
+        boolean exact =
+                contains(typed, personal);
+
+        // Se parece erro de digitação, a correção aparece primeiro.
+        if (!exact && prefix.length() >= 2) {
+            Correction correction =
+                    bestAutocorrect(
+                            typed,
+                            personal
+                    );
+
+            if (correction != null) {
+                out.add(correction.word);
+            }
+        }
+
+        // A partir da PRIMEIRA letra já tenta completar a palavra.
+        List<Entry> base =
+                prefixBase(
+                        prefix,
+                        40
+                );
+
+        for (Entry e : rerankPersonal(
+                base,
+                personal,
+                12
+        )) {
+            out.add(e.word);
+
+            if (out.size() >= limit) {
+                break;
+            }
+        }
+
+        if (exact && out.size() < limit) {
+            out.add(typed);
+        }
+
+        // Se o prefixo já está errado, completa com candidatos fuzzy.
+        if (out.size() < limit &&
+                prefix.length() >= 3) {
+
+            for (String value :
+                    fuzzyCorrections(
+                            typed,
+                            personal,
+                            limit
+                    )) {
+
+                out.add(value);
+
+                if (out.size() >= limit) {
+                    break;
+                }
+            }
+        }
+
+        return out.toArray(new String[0]);
+    }
+
+    private void addNormalizedCandidate(
+            Set<String> candidateNorms,
+            String value
+    ) {
+        if (value == null ||
+                value.length() < 2) {
+            return;
+        }
+
+        candidateNorms.add(value);
+    }
+
+    private String keyboardNeighbors(char c) {
+        switch (c) {
+            case 'q': return "wa";
+            case 'w': return "qeas";
+            case 'e': return "wrsd";
+            case 'r': return "etdf";
+            case 't': return "ryfg";
+            case 'y': return "tugh";
+            case 'u': return "yihj";
+            case 'i': return "uojk";
+            case 'o': return "ipkl";
+            case 'p': return "ol";
+            case 'a': return "qwsz";
+            case 's': return "awedxz";
+            case 'd': return "serfcx";
+            case 'f': return "drtgvc";
+            case 'g': return "ftyhbv";
+            case 'h': return "gyujnb";
+            case 'j': return "huikmn";
+            case 'k': return "jiolm";
+            case 'l': return "kop";
+            case 'z': return "asx";
+            case 'x': return "zsdc";
+            case 'c': return "xdfv";
+            case 'v': return "cfgb";
+            case 'b': return "vghn";
+            case 'n': return "bhjm";
+            case 'm': return "njk";
+            default: return "";
+        }
+    }
+
+    private Set<String> editOneCandidates(
+            String word
+    ) {
+        LinkedHashSet<String> out =
+                new LinkedHashSet<>();
+
+        int len = word.length();
+
+        // Remoção
+        for (int i=0; i<len; i++) {
+            addNormalizedCandidate(
+                    out,
+                    word.substring(0, i) +
+                    word.substring(i + 1)
+            );
+        }
+
+        // Troca de posição
+        for (int i=0; i<len - 1; i++) {
+            char[] chars = word.toCharArray();
+            char tmp = chars[i];
+            chars[i] = chars[i + 1];
+            chars[i + 1] = tmp;
+
+            addNormalizedCandidate(
+                    out,
+                    new String(chars)
+            );
+        }
+
+        // Substituição:
+        // primeira letra usa vizinhos do teclado pra evitar carregar 26
+        // dicionários; demais posições testam todo o alfabeto.
+        for (int i=0; i<len; i++) {
+            char original = word.charAt(i);
+
+            if (i == 0) {
+                String neighbors =
+                        keyboardNeighbors(original);
+
+                for (int n=0; n<neighbors.length(); n++) {
+                    char repl = neighbors.charAt(n);
+
+                    addNormalizedCandidate(
+                            out,
+                            repl + word.substring(1)
+                    );
+                }
+            } else {
+                for (char repl : alphabet) {
+                    if (repl == original) continue;
+
+                    addNormalizedCandidate(
+                            out,
+                            word.substring(0, i) +
+                            repl +
+                            word.substring(i + 1)
+                    );
+                }
+            }
+        }
+
+        // Inserção: em qualquer posição depois da primeira letra.
+        for (int i=1; i<=len; i++) {
+            for (char ins : alphabet) {
+                addNormalizedCandidate(
+                        out,
+                        word.substring(0, i) +
+                        ins +
+                        word.substring(i)
+                );
+            }
+        }
+
+        return out;
+    }
+
+    private List<Ranked> fuzzyRanked(
+            String typed,
+            PersonalLanguageModel personal,
+            int limit
+    ) {
+        String norm = normalize(typed);
+
+        if (norm.length() < 2) {
+            return Collections.emptyList();
+        }
+
+        List<Ranked> ranked =
+                new ArrayList<>();
+
+        // Primeiro: mesma palavra normalizada, só faltando acento/cedilha.
+        for (Entry e : exactNormalized(norm)) {
+            if (!e.word.equalsIgnoreCase(typed)) {
+                ranked.add(
+                        new Ranked(
+                                e,
+                                -5000.0 +
+                                personalRank(e, personal)
+                        )
+                );
+            }
+        }
+
+        if (norm.length() >= 3) {
+            Set<String> candidates =
+                    editOneCandidates(norm);
+
+            for (String candidateNorm : candidates) {
+                for (Entry e :
+                        exactNormalized(candidateNorm)) {
+
+                    ranked.add(
+                            new Ranked(
+                                    e,
+                                    1000.0 +
+                                    personalRank(e, personal)
+                            )
+                    );
+                }
+            }
+        }
+
+        Collections.sort(
+                ranked,
+                Comparator.comparingDouble(a -> a.rank)
+        );
+
+        if (ranked.size() > limit) {
+            return new ArrayList<>(
+                    ranked.subList(
+                            0,
+                            limit
+                    )
+            );
+        }
+
+        return ranked;
+    }
+
+    public String[] fuzzyCorrections(
+            String typed,
+            PersonalLanguageModel personal,
+            int limit
+    ) {
+        LinkedHashSet<String> out =
+                new LinkedHashSet<>();
+
+        for (Ranked r :
+                fuzzyRanked(
+                        typed,
+                        personal,
+                        Math.max(limit * 6, 24)
+                )) {
+
+            out.add(r.entry.word);
+
+            if (out.size() >= limit) {
+                break;
+            }
+        }
+
+        return out.toArray(new String[0]);
     }
 
     public Correction bestAutocorrect(
             String typed,
             PersonalLanguageModel personal
     ) {
-        if (typed == null || typed.length() < 2) return null;
-
-        if (contains(typed, personal)) return null;
-
-        String norm = normalize(typed);
-        List<Entry> list = bucket(norm);
-        if (list.isEmpty()) return null;
-
-        Entry best = null;
-        int bestDistance = 99;
-        double bestRank = Double.MAX_VALUE;
-        boolean accentOnly = false;
-
-        for (Entry e : list) {
-            if (Math.abs(e.norm.length() - norm.length()) > 1) {
-                continue;
-            }
-
-            int distance =
-                    damerauDistance(
-                            norm,
-                            e.norm,
-                            1
-                    );
-
-            if (distance > 1) continue;
-
-            boolean sameNormalized =
-                    distance == 0;
-
-            int personalCount =
-                    personal == null ? 0 : personal.wordCount(e.word);
-
-            double rank =
-                    distance * 1000.0 +
-                    e.score -
-                    Math.log1p(personalCount) * 10.0;
-
-            if (sameNormalized) rank -= 5000.0;
-
-            if (rank < bestRank) {
-                best = e;
-                bestRank = rank;
-                bestDistance = distance;
-                accentOnly = sameNormalized;
-            }
-        }
-
-        if (best == null) return null;
-
-        if (!accentOnly && bestDistance != 1) {
+        if (typed == null ||
+                typed.length() < 2 ||
+                contains(typed, personal)) {
             return null;
         }
 
-        return new Correction(
-                best.word,
-                bestDistance,
-                accentOnly
-        );
-    }
+        List<Ranked> ranked =
+                fuzzyRanked(
+                        typed,
+                        personal,
+                        1
+                );
 
-    private int damerauDistance(
-            String a,
-            String b,
-            int max
-    ) {
-        int n = a.length();
-        int m = b.length();
-
-        if (Math.abs(n - m) > max) {
-            return max + 1;
+        if (ranked.isEmpty()) {
+            return null;
         }
 
-        int[][] d = new int[n + 1][m + 1];
+        Entry best =
+                ranked.get(0).entry;
 
-        for (int i=0; i<=n; i++) d[i][0] = i;
-        for (int j=0; j<=m; j++) d[0][j] = j;
-
-        for (int i=1; i<=n; i++) {
-            int rowBest = max + 1;
-
-            for (int j=1; j<=m; j++) {
-                int cost =
-                        a.charAt(i - 1) ==
-                        b.charAt(j - 1)
-                                ? 0
-                                : 1;
-
-                int value =
-                        Math.min(
-                                Math.min(
-                                        d[i - 1][j] + 1,
-                                        d[i][j - 1] + 1
-                                ),
-                                d[i - 1][j - 1] + cost
+        boolean accentOnly =
+                normalize(best.word)
+                        .equals(
+                                normalize(typed)
                         );
 
-                if (i > 1 &&
-                        j > 1 &&
-                        a.charAt(i - 1) == b.charAt(j - 2) &&
-                        a.charAt(i - 2) == b.charAt(j - 1)) {
-
-                    value =
-                            Math.min(
-                                    value,
-                                    d[i - 2][j - 2] + 1
-                            );
-                }
-
-                d[i][j] = value;
-                rowBest = Math.min(rowBest, value);
-            }
-
-            if (rowBest > max) {
-                return max + 1;
-            }
-        }
-
-        return d[n][m];
+        return new Correction(
+                best.word,
+                accentOnly ? 0 : 1,
+                accentOnly
+        );
     }
 }

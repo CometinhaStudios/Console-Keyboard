@@ -1071,6 +1071,8 @@ igaracy	15.374950	igaracy
 igarapava	15.369149	igarapava
 igarapavense	20.770891	igarapavense
 igarape	13.338664	igarapé
+igarape-acu	30.000000	Igarapé-Açu
+igarape-miri	30.000000	Igarapé-Miri
 igarapeense	21.157664	igarapeense
 igarapemiriense	22.949423	igarapemiriense
 igarassu	14.246775	igarassu

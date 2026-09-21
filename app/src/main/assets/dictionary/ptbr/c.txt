@@ -11548,6 +11548,7 @@ ceando	18.074226	ceando
 cear	14.882640	cear
 ceara	9.926713	ceará
 ceara	13.247144	ceara
+ceara-mirim	30.000000	Ceará-Mirim
 cearam	18.798383	cearam
 cearamos	22.949423	ceáramos
 cearao	21.103597	cearão
