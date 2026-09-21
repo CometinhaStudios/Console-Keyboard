@@ -80,7 +80,7 @@ public class ConsoleKeyboardView extends BaseKeyboardView {
         if (key == null) return;
 
         if (key.action == ACT_SHIFT) {
-            listener.onKeyFeedback();
+            feedbackAsync();
             flashKey(key);
             upper = !upper;
             build();
@@ -241,25 +241,25 @@ public class ConsoleKeyboardView extends BaseKeyboardView {
                     return true;
 
                 case KeyEvent.KEYCODE_BUTTON_X:
-                    listener.onKeyFeedback();
+                    feedbackAsync();
                     flashAction(ACT_BACKSPACE);
                     listener.onBackspace();
                     return true;
 
                 case KeyEvent.KEYCODE_BUTTON_Y:
-                    listener.onKeyFeedback();
+                    feedbackAsync();
                     flashAction(ACT_SPACE);
                     listener.onSpace();
                     return true;
 
                 case KeyEvent.KEYCODE_BUTTON_R2:
-                    listener.onKeyFeedback();
+                    feedbackAsync();
                     flashAction(ACT_ENTER);
                     listener.onEnter();
                     return true;
 
                 case KeyEvent.KEYCODE_BUTTON_B:
-                    listener.onKeyFeedback();
+                    feedbackAsync();
                     listener.onHide();
                     return true;
             }

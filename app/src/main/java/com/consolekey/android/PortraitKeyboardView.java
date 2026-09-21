@@ -332,7 +332,7 @@ public class PortraitKeyboardView extends BaseKeyboardView {
         }
 
         if (key.action == ACT_SHIFT) {
-            listener.onKeyFeedback();
+            feedbackAsync();
             flashKey(key);
             upper = !upper;
             rebuild();
@@ -340,7 +340,7 @@ public class PortraitKeyboardView extends BaseKeyboardView {
         }
 
         if (key.action == ACT_SYMBOLS) {
-            listener.onKeyFeedback();
+            feedbackAsync();
             flashKey(key);
 
             if (page == 0) page = 1;
@@ -704,7 +704,7 @@ public class PortraitKeyboardView extends BaseKeyboardView {
                     Math.max(0, (int)(x / (getWidth() / emojiModeIcons.length)))
             );
 
-            listener.onKeyFeedback();
+            feedbackAsync();
 
             if (index == 0) {
                 emojiMode = false;
@@ -721,7 +721,7 @@ public class PortraitKeyboardView extends BaseKeyboardView {
                     Math.max(0, (int)(x / (getWidth() / emojiCategoryIcons.length)))
             );
 
-            listener.onKeyFeedback();
+            feedbackAsync();
 
             // A lupa fica visualmente igual ao Samsung. Enquanto não há busca textual,
             // ela leva às carinhas em vez de quebrar a experiência.
@@ -744,7 +744,7 @@ public class PortraitKeyboardView extends BaseKeyboardView {
             float seg = getWidth() / 5f;
             int i = Math.min(4, (int)(e.getX() / seg));
 
-            listener.onKeyFeedback();
+            feedbackAsync();
 
             if (i == 0) {
                 emojiMode = true;

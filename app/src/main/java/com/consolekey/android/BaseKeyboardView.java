@@ -150,7 +150,7 @@ public abstract class BaseKeyboardView extends View {
                 pressedKey = null;
                 invalidate();
             }
-        }, 95);
+        }, 58);
     }
 
     protected void flashAction(int action) {
@@ -164,12 +164,20 @@ public abstract class BaseKeyboardView extends View {
         }
     }
 
+    protected void feedbackAsync() {
+        if (listener == null) return;
+
+        // Não segura o commitText esperando vibração.
+        // O haptic roda no próximo ciclo da UI.
+        post(() -> {
+            if (listener != null) listener.onKeyFeedback();
+        });
+    }
+
     protected void perform(Key key) {
         if (key == null || listener == null) return;
 
-        listener.onKeyFeedback();
-        flashKey(key);
-
+        // Primeiro envia a tecla para o app. Visual/haptic vêm depois.
         switch (key.action) {
             case ACT_BACKSPACE: listener.onBackspace(); break;
             case ACT_ENTER: listener.onEnter(); break;
@@ -179,12 +187,15 @@ public abstract class BaseKeyboardView extends View {
                 if (key.value != null) listener.onText(key.value);
                 break;
         }
+
+        flashKey(key);
+        feedbackAsync();
     }
 
     protected void commitAlternate(Key key, String value) {
         if (listener == null || value == null) return;
-        listener.onKeyFeedback();
         listener.onText(value);
+        feedbackAsync();
     }
 
     protected void layoutRows(float top, float bottom) {
@@ -309,8 +320,8 @@ public abstract class BaseKeyboardView extends View {
 
         longPressTriggered = true;
         repeating = true;
-        listener.onKeyFeedback();
         listener.onBackspace();
+        feedbackAsync();
 
         repeatRunnable = new Runnable() {
             @Override public void run() {
@@ -331,7 +342,7 @@ public abstract class BaseKeyboardView extends View {
         popupKey = key;
         popupOptions = key.longPress;
         popupIndex = 0;
-        listener.onKeyFeedback();
+        feedbackAsync();
         invalidate();
     }
 
@@ -371,7 +382,7 @@ public abstract class BaseKeyboardView extends View {
 
         if (index != popupIndex) {
             popupIndex = index;
-            listener.onKeyFeedback();
+            feedbackAsync();
             invalidate();
         }
     }
@@ -387,7 +398,7 @@ public abstract class BaseKeyboardView extends View {
         popupIndex = Math.max(0, Math.min(popupOptions.length - 1, popupIndex + delta));
 
         if (popupIndex != old) {
-            listener.onKeyFeedback();
+            feedbackAsync();
             invalidate();
         }
 

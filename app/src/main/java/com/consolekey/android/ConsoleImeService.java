@@ -10,10 +10,14 @@ import android.os.VibrationEffect;
 import android.os.Vibrator;
 import android.os.VibratorManager;
 import android.view.InputDevice;
+import android.view.HapticFeedbackConstants;
 import android.view.KeyEvent;
 import android.view.View;
 import android.view.inputmethod.EditorInfo;
 import android.view.inputmethod.InputConnection;
+
+import java.util.concurrent.ExecutorService;
+import java.util.concurrent.Executors;
 
 public class ConsoleImeService extends InputMethodService implements InputManagerCompat.Listener, BaseKeyboardView.Listener {
     public static final String PREFS = "keyboard_prefs";
@@ -25,6 +29,7 @@ public class ConsoleImeService extends InputMethodService implements InputManage
     private BaseKeyboardView keyboardView;
     private ControllerDetector.Family activeFamily = ControllerDetector.Family.GENERIC;
     private int activeControllerId = -1;
+    private final ExecutorService hapticExecutor = Executors.newSingleThreadExecutor();
 
     @Override public void onCreate() {
         super.onCreate();
@@ -37,6 +42,7 @@ public class ConsoleImeService extends InputMethodService implements InputManage
 
     @Override public void onDestroy() {
         if (inputManager != null) inputManager.unregister();
+        hapticExecutor.shutdownNow();
         super.onDestroy();
     }
 
@@ -159,7 +165,22 @@ public class ConsoleImeService extends InputMethodService implements InputManage
     }
 
     @Override public void onKeyFeedback() {
-        if (!vibrateGamepad()) vibratePhone();
+        // Sem controle: usa o caminho de haptic nativo da própria View,
+        // que é bem mais leve que consultar VibratorManager a cada tecla.
+        if (activeControllerId < 0 && keyboardView != null) {
+            try {
+                if (keyboardView.performHapticFeedback(HapticFeedbackConstants.KEYBOARD_TAP)) {
+                    return;
+                }
+            } catch (Throwable ignored) {}
+        }
+
+        // Rumble do gamepad/fallback não bloqueia a thread da digitação.
+        try {
+            hapticExecutor.execute(() -> {
+                if (!vibrateGamepad()) vibratePhone();
+            });
+        } catch (Throwable ignored) {}
     }
 
     @Override public void onOpenSettings() {
@@ -210,17 +231,20 @@ public class ConsoleImeService extends InputMethodService implements InputManage
     }
 
     @Override public void onText(String text) {
-        if (ic() != null) ic().commitText(text, 1);
+        InputConnection c = ic();
+        if (c != null) c.commitText(text, 1);
     }
 
     @Override public void onBackspace() {
-        if (ic() != null) ic().deleteSurroundingText(1, 0);
+        InputConnection c = ic();
+        if (c != null) c.deleteSurroundingText(1, 0);
     }
 
     @Override public void onEnter() {
-        if (ic() != null) {
-            ic().sendKeyEvent(new KeyEvent(KeyEvent.ACTION_DOWN, KeyEvent.KEYCODE_ENTER));
-            ic().sendKeyEvent(new KeyEvent(KeyEvent.ACTION_UP, KeyEvent.KEYCODE_ENTER));
+        InputConnection c = ic();
+        if (c != null) {
+            c.sendKeyEvent(new KeyEvent(KeyEvent.ACTION_DOWN, KeyEvent.KEYCODE_ENTER));
+            c.sendKeyEvent(new KeyEvent(KeyEvent.ACTION_UP, KeyEvent.KEYCODE_ENTER));
         }
     }
 
