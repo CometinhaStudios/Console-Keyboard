@@ -100,27 +100,28 @@ public abstract class BaseKeyboardView extends View {
     public BaseKeyboardView(Context c, Listener l) {
         super(c);
         listener = l;
-        gap = dp(6);
-        radius = dp(10);
+        gap = dp(4.5f);
+        radius = dp(8f);
 
-        fill.setColor(Color.rgb(16,16,16));
+        fill.setColor(Color.rgb(10,10,10));
 
         text.setColor(Color.WHITE);
         text.setTextAlign(Paint.Align.CENTER);
+        text.setTextSize(dp(17.5f));
 
-        secondary.setColor(Color.rgb(175,175,175));
+        secondary.setColor(Color.rgb(150,150,150));
         secondary.setTextAlign(Paint.Align.RIGHT);
-        secondary.setTextSize(dp(9));
+        secondary.setTextSize(dp(8));
 
         accent.setStyle(Paint.Style.STROKE);
-        accent.setStrokeWidth(dp(2));
+        accent.setStrokeWidth(dp(1.6f));
         accent.setColor(Color.WHITE);
 
-        popupPaint.setColor(Color.rgb(42,42,42));
-        popupSelectedPaint.setColor(Color.rgb(90,90,90));
+        popupPaint.setColor(Color.rgb(24,24,24));
+        popupSelectedPaint.setColor(Color.rgb(58,58,58));
         popupTextPaint.setColor(Color.WHITE);
         popupTextPaint.setTextAlign(Paint.Align.CENTER);
-        popupTextPaint.setTextSize(dp(21));
+        popupTextPaint.setTextSize(dp(18));
 
         setFocusable(true);
         setFocusableInTouchMode(true);
@@ -257,7 +258,7 @@ public abstract class BaseKeyboardView extends View {
 
     protected void drawKey(Canvas c, Key key, boolean selected) {
         boolean pressed = key == pressedKey;
-        int bg = pressed ? Color.rgb(78,78,78) : selected ? Color.rgb(52,52,52) : Color.rgb(16,16,16);
+        int bg = pressed ? Color.rgb(58,58,58) : selected ? Color.rgb(34,34,34) : Color.rgb(11,11,11);
 
         fill.setColor(bg);
         c.drawRoundRect(key.rect, radius, radius, fill);

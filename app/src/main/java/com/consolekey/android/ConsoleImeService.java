@@ -176,7 +176,7 @@ public class ConsoleImeService extends InputMethodService
                 landscape()
                         ? PREF_LANDSCAPE_HEIGHT
                         : PREF_PORTRAIT_HEIGHT,
-                landscape() ? 150 : 235
+                landscape() ? 145 : 228
         );
     }
 

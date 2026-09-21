@@ -37,21 +37,21 @@ public class ConsoleKeyboardView extends BaseKeyboardView {
         super(c, l);
         this.numericMode = numericMode;
 
-        setPadding((int)dp(8),(int)dp(6),(int)dp(8),(int)dp(6));
-        gap = dp(4);
-        radius = dp(6);
-        headerH = dp(28);
+        setPadding((int)dp(8),(int)dp(4),(int)dp(8),(int)dp(4));
+        gap = dp(3.5f);
+        radius = dp(5f);
+        headerH = dp(22);
         suggestionH = 0f;
 
         suggestionBg.setColor(Color.rgb(10,10,10));
         suggestionText.setColor(Color.WHITE);
         suggestionText.setTextAlign(Paint.Align.CENTER);
-        suggestionText.setTextSize(dp(12));
+        suggestionText.setTextSize(dp(11));
         suggestionDivider.setColor(Color.rgb(42,42,42));
         suggestionDivider.setStrokeWidth(dp(1));
 
         hint.setColor(Color.LTGRAY);
-        hint.setTextSize(dp(11));
+        hint.setTextSize(dp(10));
         hint.setTextAlign(Paint.Align.LEFT);
 
         build();
@@ -127,10 +127,10 @@ public class ConsoleKeyboardView extends BaseKeyboardView {
             List<Key> bottom = new ArrayList<>();
             bottom.add(k("⇧", null, 1.0f, ACT_SHIFT));
             bottom.add(k("@#:", null, 1.0f, ACT_SYMBOLS));
-            bottom.add(k("CLIP", null, 0.9f, ACT_CLIPBOARD));
-            bottom.add(k("SPACE", null, 4.1f, ACT_SPACE));
+            bottom.add(k("CLIP", null, 0.8f, ACT_CLIPBOARD));
+            bottom.add(k("SPACE", null, 4.45f, ACT_SPACE));
             bottom.add(kRepeat("⌫", null, 1.2f, ACT_BACKSPACE));
-            bottom.add(k("DONE", null, 1.5f, ACT_ENTER));
+            bottom.add(k("DONE", null, 1.35f, ACT_ENTER));
             rows.add(bottom);
         } else if (page == 1) {
             rows.add(numberRow());
@@ -147,10 +147,10 @@ public class ConsoleKeyboardView extends BaseKeyboardView {
 
             List<Key> bottom = new ArrayList<>();
             bottom.add(k("ABC", null, 1.0f, ACT_SYMBOLS));
-            bottom.add(k("CLIP", null, 0.9f, ACT_CLIPBOARD));
-            bottom.add(k("SPACE", null, 4.5f, ACT_SPACE));
+            bottom.add(k("CLIP", null, 0.8f, ACT_CLIPBOARD));
+            bottom.add(k("SPACE", null, 4.75f, ACT_SPACE));
             bottom.add(kRepeat("⌫", null, 1.2f, ACT_BACKSPACE));
-            bottom.add(k("DONE", null, 1.5f, ACT_ENTER));
+            bottom.add(k("DONE", null, 1.35f, ACT_ENTER));
             rows.add(bottom);
         } else {
             rows.add(numberRow());
@@ -167,10 +167,10 @@ public class ConsoleKeyboardView extends BaseKeyboardView {
 
             List<Key> bottom = new ArrayList<>();
             bottom.add(k("ABC", null, 1.0f, ACT_SYMBOLS));
-            bottom.add(k("CLIP", null, 0.9f, ACT_CLIPBOARD));
-            bottom.add(k("SPACE", null, 4.5f, ACT_SPACE));
+            bottom.add(k("CLIP", null, 0.8f, ACT_CLIPBOARD));
+            bottom.add(k("SPACE", null, 4.75f, ACT_SPACE));
             bottom.add(kRepeat("⌫", null, 1.2f, ACT_BACKSPACE));
-            bottom.add(k("DONE", null, 1.5f, ACT_ENTER));
+            bottom.add(k("DONE", null, 1.35f, ACT_ENTER));
             rows.add(bottom);
         }
 
