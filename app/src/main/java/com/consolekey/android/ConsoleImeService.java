@@ -58,7 +58,8 @@ public class ConsoleImeService extends InputMethodService
     private String suggestionWord = "";
     private String safeAutocorrect = null;
     private String[] visibleSuggestions = new String[0];
-    private boolean correctionEnabled = true;
+    private boolean correctionEnabled = false;
+    private boolean numericInput = false;
 
     private final Runnable suggestionRefresh = this::requestSuggestionsNow;
 
@@ -67,7 +68,7 @@ public class ConsoleImeService extends InputMethodService
         inputManager = new InputManagerCompat(this, this);
         inputManager.register();
         refreshController();
-        openSpellChecker();
+        // Corretor antigo desativado nesta versão.
     }
 
     private void openSpellChecker() {
@@ -125,12 +126,24 @@ public class ConsoleImeService extends InputMethodService
         return keyboardView;
     }
 
-    @Override public void onStartInputView(EditorInfo info, boolean restarting) {
+    @Override public void onStartInputView(
+            EditorInfo info,
+            boolean restarting
+    ) {
         super.onStartInputView(info, restarting);
-        correctionEnabled = canUseCorrection(info);
+
+        int inputClass = info == null
+                ? 0
+                : (info.inputType & InputType.TYPE_MASK_CLASS);
+
+        numericInput =
+                inputClass == InputType.TYPE_CLASS_NUMBER ||
+                inputClass == InputType.TYPE_CLASS_PHONE;
+
+        correctionEnabled = false;
         clearSuggestions();
-        applyKeyboardHeight();
-        if (correctionEnabled) scheduleSuggestionRefresh();
+
+        setInputView(onCreateInputView());
     }
 
     @Override public void onConfigurationChanged(Configuration newConfig) {
@@ -294,9 +307,7 @@ public class ConsoleImeService extends InputMethodService
     }
 
     private void scheduleSuggestionRefresh() {
-        mainHandler.removeCallbacks(suggestionRefresh);
-        if (!correctionEnabled) { clearSuggestions(); return; }
-        mainHandler.postDelayed(suggestionRefresh, 24);
+        // Corretor será refeito com dicionário próprio em outra versão.
     }
 
     private String currentWord() {

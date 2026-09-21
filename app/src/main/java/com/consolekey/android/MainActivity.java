@@ -129,7 +129,7 @@ public class MainActivity extends Activity {
 
         TextView sub = new TextView(this);
         sub.setText(
-                "v0.2.2\n\n" +
+                "v0.2.3\n\n" +
                 "Retrato: teclado normal + painel de emoji por categorias + long press.\n" +
                 "Paisagem: console por toque + controle.\n" +
                 "Xbox/PlayStation detectados automaticamente."

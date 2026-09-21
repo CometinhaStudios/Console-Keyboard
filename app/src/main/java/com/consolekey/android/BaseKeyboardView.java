@@ -94,7 +94,7 @@ public abstract class BaseKeyboardView extends View {
     private final SparseArray<FastTouchState> fastTouches = new SparseArray<>();
     private int fastPopupPointerId = -1;
 
-    public static final int ACT_TEXT=0, ACT_BACKSPACE=1, ACT_ENTER=2, ACT_SPACE=3, ACT_SHIFT=4, ACT_SYMBOLS=5, ACT_HIDE=6;
+    public static final int ACT_TEXT=0, ACT_BACKSPACE=1, ACT_ENTER=2, ACT_SPACE=3, ACT_SHIFT=4, ACT_SYMBOLS=5, ACT_HIDE=6, ACT_EMOJI=7;
 
     public BaseKeyboardView(Context c, Listener l) {
         super(c);

@@ -16,6 +16,8 @@ public class ConsoleKeyboardView extends BaseKeyboardView {
     private int selRow = 1;
     private int selCol = 0;
     private boolean upper = false;
+    private boolean numericMode = false;
+    private int page = 0;
 
     private final Paint hint = new Paint(Paint.ANTI_ALIAS_FLAG);
     private float headerH;
@@ -28,13 +30,18 @@ public class ConsoleKeyboardView extends BaseKeyboardView {
     private boolean suggestionTouch = false;
 
     public ConsoleKeyboardView(Context c, Listener l) {
+        this(c, l, false);
+    }
+
+    public ConsoleKeyboardView(Context c, Listener l, boolean numericMode) {
         super(c, l);
+        this.numericMode = numericMode;
 
         setPadding((int)dp(8),(int)dp(6),(int)dp(8),(int)dp(6));
         gap = dp(4);
         radius = dp(6);
         headerH = dp(28);
-        suggestionH = dp(26);
+        suggestionH = 0f;
 
         suggestionBg.setColor(Color.rgb(10,10,10));
         suggestionText.setColor(Color.WHITE);
@@ -76,18 +83,77 @@ public class ConsoleKeyboardView extends BaseKeyboardView {
     private void build() {
         rows.clear();
 
-        rows.add(numberRow());
-        rows.add(letterRow("q","w","e","r","t","y","u","i","o","p"));
-        rows.add(letterRow("a","s","d","f","g","h","j","k","l"));
-        rows.add(letterRow("z","x","c","v","b","n","m",",",".","?"));
+        if (numericMode) {
+            rows.add(letterRow("1","2","3"));
+            rows.add(letterRow("4","5","6"));
+            rows.add(letterRow("7","8","9"));
 
-        List<Key> bottom = new ArrayList<>();
-        bottom.add(k("⇧", null, 1.0f, ACT_SHIFT));
-        bottom.add(k("@#:", null, 1.0f, ACT_SYMBOLS));
-        bottom.add(k("SPACE", null, 4.8f, ACT_SPACE));
-        bottom.add(kRepeat("⌫", null, 1.2f, ACT_BACKSPACE));
-        bottom.add(k("DONE", null, 1.5f, ACT_ENTER));
-        rows.add(bottom);
+            List<Key> last = new ArrayList<>();
+            last.add(k("", null, 1f, ACT_TEXT));
+            last.add(normalKey("0"));
+            last.add(kRepeat("⌫", null, 1f, ACT_BACKSPACE));
+            rows.add(last);
+
+            List<Key> done = new ArrayList<>();
+            done.add(k("DONE", null, 3f, ACT_ENTER));
+            rows.add(done);
+
+            clamp();
+            return;
+        }
+
+        if (page == 0) {
+            rows.add(numberRow());
+            rows.add(letterRow("q","w","e","r","t","y","u","i","o","p"));
+            rows.add(letterRow("a","s","d","f","g","h","j","k","l"));
+            rows.add(letterRow("z","x","c","v","b","n","m",",",".","?"));
+
+            List<Key> bottom = new ArrayList<>();
+            bottom.add(k("⇧", null, 1.0f, ACT_SHIFT));
+            bottom.add(k("@#:", null, 1.0f, ACT_SYMBOLS));
+            bottom.add(k("SPACE", null, 4.8f, ACT_SPACE));
+            bottom.add(kRepeat("⌫", null, 1.2f, ACT_BACKSPACE));
+            bottom.add(k("DONE", null, 1.5f, ACT_ENTER));
+            rows.add(bottom);
+        } else if (page == 1) {
+            rows.add(numberRow());
+            rows.add(letterRow("+","×","÷","=","/","_","<",">","[","]"));
+            rows.add(letterRow("!","@","#","$","%","^","&","*","(",")"));
+
+            List<Key> r4 = new ArrayList<>();
+            r4.add(k("2/2", null, 1f, ACT_SYMBOLS));
+            for (String value : new String[]{"-","'","\"",":",";",",","?"}) {
+                r4.add(normalKey(value));
+            }
+            r4.add(kRepeat("⌫", null, 1.15f, ACT_BACKSPACE));
+            rows.add(r4);
+
+            List<Key> bottom = new ArrayList<>();
+            bottom.add(k("ABC", null, 1.0f, ACT_SYMBOLS));
+            bottom.add(k("SPACE", null, 5.2f, ACT_SPACE));
+            bottom.add(kRepeat("⌫", null, 1.2f, ACT_BACKSPACE));
+            bottom.add(k("DONE", null, 1.5f, ACT_ENTER));
+            rows.add(bottom);
+        } else {
+            rows.add(numberRow());
+            rows.add(letterRow("`","~","\\","|","{","}","€","£","¥","₩"));
+            rows.add(letterRow("°","•","○","●","□","■","♠","♡","◇","♣"));
+
+            List<Key> r4 = new ArrayList<>();
+            r4.add(k("1/2", null, 1f, ACT_SYMBOLS));
+            for (String value : new String[]{"☆","▪","¤","《","》","¡","¿"}) {
+                r4.add(normalKey(value));
+            }
+            r4.add(kRepeat("⌫", null, 1.15f, ACT_BACKSPACE));
+            rows.add(r4);
+
+            List<Key> bottom = new ArrayList<>();
+            bottom.add(k("ABC", null, 1.0f, ACT_SYMBOLS));
+            bottom.add(k("SPACE", null, 5.2f, ACT_SPACE));
+            bottom.add(kRepeat("⌫", null, 1.2f, ACT_BACKSPACE));
+            bottom.add(k("DONE", null, 1.5f, ACT_ENTER));
+            rows.add(bottom);
+        }
 
         clamp();
     }
@@ -103,7 +169,25 @@ public class ConsoleKeyboardView extends BaseKeyboardView {
             return;
         }
 
-        boolean oneShotShift = upper && key.action == ACT_TEXT;
+        if (key.action == ACT_SYMBOLS) {
+            feedbackAsync();
+            flashKey(key);
+
+            if ("ABC".equals(key.label)) {
+                page = 0;
+            } else if ("2/2".equals(key.label)) {
+                page = 2;
+            } else if ("1/2".equals(key.label)) {
+                page = 1;
+            } else {
+                page = 1;
+            }
+
+            build();
+            return;
+        }
+
+        boolean oneShotShift = upper && page == 0 && key.action == ACT_TEXT;
         super.perform(key);
 
         if (oneShotShift) {
@@ -182,10 +266,6 @@ public class ConsoleKeyboardView extends BaseKeyboardView {
         return false;
     }
 
-    @Override public boolean onTouchEvent(MotionEvent e) {
-        if (handleWordSuggestionTouch(e)) return true;
-        return super.onTouchEvent(e);
-    }
 
     private String badge(String action) {
         if (family == ControllerDetector.Family.PLAYSTATION) {
@@ -251,8 +331,7 @@ public class ConsoleKeyboardView extends BaseKeyboardView {
                 hint
         );
 
-        drawWordSuggestions(c);
-        layoutRows(headerH + suggestionH + dp(2), getHeight() - dp(7));
+        layoutRows(headerH, getHeight() - dp(7));
 
         for (int r=0; r<rows.size(); r++) {
             for (int col=0; col<rows.get(r).size(); col++) {
