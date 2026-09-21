@@ -4,6 +4,9 @@ import android.content.Context;
 import android.graphics.Canvas;
 import android.graphics.Color;
 import android.graphics.Paint;
+import android.graphics.Path;
+import android.graphics.RectF;
+import android.graphics.Typeface;
 import android.view.KeyEvent;
 import android.view.MotionEvent;
 
@@ -20,6 +23,10 @@ public class ConsoleKeyboardView extends BaseKeyboardView {
     private int page = 0;
 
     private final Paint hint = new Paint(Paint.ANTI_ALIAS_FLAG);
+    private final Paint controllerBadgeFill = new Paint(Paint.ANTI_ALIAS_FLAG);
+    private final Paint controllerBadgeStroke = new Paint(Paint.ANTI_ALIAS_FLAG);
+    private final Paint controllerBadgeText = new Paint(Paint.ANTI_ALIAS_FLAG);
+    private final Path controllerBadgePath = new Path();
     private float headerH;
     private float suggestionH;
 
@@ -51,8 +58,19 @@ public class ConsoleKeyboardView extends BaseKeyboardView {
         suggestionDivider.setStrokeWidth(dp(1));
 
         hint.setColor(Color.LTGRAY);
-        hint.setTextSize(dp(10));
+        hint.setTextSize(dp(9.5f));
         hint.setTextAlign(Paint.Align.LEFT);
+
+        controllerBadgeFill.setStyle(Paint.Style.FILL);
+
+        controllerBadgeStroke.setStyle(Paint.Style.STROKE);
+        controllerBadgeStroke.setStrokeWidth(dp(1.35f));
+        controllerBadgeStroke.setStrokeCap(Paint.Cap.ROUND);
+        controllerBadgeStroke.setStrokeJoin(Paint.Join.ROUND);
+
+        controllerBadgeText.setTypeface(Typeface.DEFAULT_BOLD);
+        controllerBadgeText.setTextAlign(Paint.Align.CENTER);
+        controllerBadgeText.setTextSize(dp(7.4f));
 
         build();
     }
@@ -291,6 +309,339 @@ public class ConsoleKeyboardView extends BaseKeyboardView {
     }
 
 
+    private int xboxColor(String action) {
+        switch (action) {
+            case "confirm": return Color.rgb(66, 186, 85);
+            case "back": return Color.rgb(224, 67, 61);
+            case "delete": return Color.rgb(63, 151, 214);
+            case "space": return Color.rgb(243, 197, 60);
+        }
+        return Color.WHITE;
+    }
+
+    private int playStationColor(String action) {
+        switch (action) {
+            case "confirm": return Color.rgb(82, 190, 235);
+            case "back": return Color.rgb(245, 91, 94);
+            case "delete": return Color.rgb(240, 105, 168);
+            case "space": return Color.rgb(80, 222, 166);
+        }
+        return Color.WHITE;
+    }
+
+    private String xboxLetter(String action) {
+        switch (action) {
+            case "confirm": return "A";
+            case "back": return "B";
+            case "delete": return "X";
+            case "space": return "Y";
+        }
+        return "";
+    }
+
+    private void drawControllerFaceBadge(
+            Canvas c,
+            String action,
+            float cx,
+            float cy,
+            float size
+    ) {
+        float r = size * 0.5f;
+
+        if (family == ControllerDetector.Family.XBOX) {
+            controllerBadgeFill.setColor(xboxColor(action));
+            c.drawCircle(cx, cy, r, controllerBadgeFill);
+
+            controllerBadgeText.setColor(Color.rgb(15,15,15));
+            controllerBadgeText.setTextSize(size * 0.62f);
+
+            Paint.FontMetrics fm = controllerBadgeText.getFontMetrics();
+            float ty = cy - (fm.ascent + fm.descent) / 2f;
+
+            c.drawText(
+                    xboxLetter(action),
+                    cx,
+                    ty,
+                    controllerBadgeText
+            );
+            return;
+        }
+
+        if (family == ControllerDetector.Family.PLAYSTATION) {
+            int color = playStationColor(action);
+
+            controllerBadgeStroke.setColor(color);
+            controllerBadgeStroke.setStrokeWidth(
+                    Math.max(dp(1.15f), size * 0.13f)
+            );
+
+            float half = size * 0.38f;
+
+            switch (action) {
+                case "confirm":
+                    c.drawLine(
+                            cx - half, cy - half,
+                            cx + half, cy + half,
+                            controllerBadgeStroke
+                    );
+                    c.drawLine(
+                            cx + half, cy - half,
+                            cx - half, cy + half,
+                            controllerBadgeStroke
+                    );
+                    break;
+
+                case "back":
+                    c.drawCircle(
+                            cx,
+                            cy,
+                            half,
+                            controllerBadgeStroke
+                    );
+                    break;
+
+                case "delete":
+                    c.drawRect(
+                            cx - half,
+                            cy - half,
+                            cx + half,
+                            cy + half,
+                            controllerBadgeStroke
+                    );
+                    break;
+
+                case "space":
+                    controllerBadgePath.reset();
+                    controllerBadgePath.moveTo(cx, cy - half);
+                    controllerBadgePath.lineTo(cx + half, cy + half);
+                    controllerBadgePath.lineTo(cx - half, cy + half);
+                    controllerBadgePath.close();
+                    c.drawPath(
+                            controllerBadgePath,
+                            controllerBadgeStroke
+                    );
+                    break;
+            }
+            return;
+        }
+
+        controllerBadgeFill.setColor(Color.rgb(48,48,48));
+        c.drawCircle(cx, cy, r, controllerBadgeFill);
+
+        controllerBadgeText.setColor(Color.WHITE);
+        controllerBadgeText.setTextSize(size * 0.48f);
+
+        Paint.FontMetrics fm = controllerBadgeText.getFontMetrics();
+
+        c.drawText(
+                badge(action),
+                cx,
+                cy - (fm.ascent + fm.descent) / 2f,
+                controllerBadgeText
+        );
+    }
+
+    private String shoulderLabel(String action) {
+        if (family == ControllerDetector.Family.PLAYSTATION) {
+            switch (action) {
+                case "previous": return "L1";
+                case "next": return "R1";
+                case "shift": return "L2";
+                case "done": return "R2";
+            }
+        }
+
+        if (family == ControllerDetector.Family.XBOX) {
+            switch (action) {
+                case "previous": return "LB";
+                case "next": return "RB";
+                case "shift": return "LT";
+                case "done": return "RT";
+            }
+        }
+
+        switch (action) {
+            case "previous": return "L1";
+            case "next": return "R1";
+            case "shift": return "L2";
+            case "done": return "R2";
+        }
+
+        return "";
+    }
+
+    private void drawShoulderBadge(
+            Canvas c,
+            String action,
+            float cx,
+            float cy,
+            float height
+    ) {
+        String label = shoulderLabel(action);
+        float width = Math.max(dp(14), height * 1.65f);
+
+        RectF rect = new RectF(
+                cx - width / 2f,
+                cy - height / 2f,
+                cx + width / 2f,
+                cy + height / 2f
+        );
+
+        controllerBadgeFill.setColor(Color.rgb(24,24,24));
+        c.drawRoundRect(
+                rect,
+                height * 0.34f,
+                height * 0.34f,
+                controllerBadgeFill
+        );
+
+        controllerBadgeStroke.setColor(Color.rgb(205,205,205));
+        controllerBadgeStroke.setStrokeWidth(dp(1));
+
+        c.drawRoundRect(
+                rect,
+                height * 0.34f,
+                height * 0.34f,
+                controllerBadgeStroke
+        );
+
+        controllerBadgeText.setColor(Color.WHITE);
+        controllerBadgeText.setTextSize(height * 0.55f);
+
+        Paint.FontMetrics fm = controllerBadgeText.getFontMetrics();
+
+        c.drawText(
+                label,
+                rect.centerX(),
+                rect.centerY() -
+                (fm.ascent + fm.descent) / 2f,
+                controllerBadgeText
+        );
+    }
+
+    private void drawActionBadges(
+            Canvas c,
+            Key key,
+            boolean selected
+    ) {
+        if (key == null ||
+                key.rect.width() <= 0f ||
+                key.rect.height() <= 0f) {
+            return;
+        }
+
+        float face = Math.min(
+                dp(12),
+                key.rect.height() * 0.23f
+        );
+
+        float shoulderH = Math.min(
+                dp(8.5f),
+                key.rect.height() * 0.16f
+        );
+
+        float topY = key.rect.top +
+                Math.max(dp(6), face * 0.62f);
+
+        float leftX = key.rect.left +
+                Math.max(dp(8), face * 0.65f);
+
+        float rightX = key.rect.right -
+                Math.max(dp(8), face * 0.65f);
+
+        if (selected) {
+            drawControllerFaceBadge(
+                    c,
+                    "confirm",
+                    rightX,
+                    topY,
+                    face
+            );
+        }
+
+        switch (key.action) {
+            case ACT_BACKSPACE:
+                drawControllerFaceBadge(
+                        c,
+                        "delete",
+                        leftX,
+                        topY,
+                        face
+                );
+                break;
+
+            case ACT_SPACE:
+                drawControllerFaceBadge(
+                        c,
+                        "space",
+                        leftX,
+                        topY,
+                        face
+                );
+                break;
+
+            case ACT_ENTER:
+                drawShoulderBadge(
+                        c,
+                        "done",
+                        leftX + dp(2),
+                        topY,
+                        shoulderH
+                );
+                break;
+
+            case ACT_SHIFT:
+                drawShoulderBadge(
+                        c,
+                        "shift",
+                        leftX + dp(2),
+                        topY,
+                        shoulderH
+                );
+                break;
+
+            case ACT_SYMBOLS:
+                float center = key.rect.centerX();
+
+                drawShoulderBadge(
+                        c,
+                        "previous",
+                        center - dp(7.2f),
+                        topY,
+                        shoulderH
+                );
+
+                drawShoulderBadge(
+                        c,
+                        "next",
+                        center + dp(7.2f),
+                        topY,
+                        shoulderH
+                );
+                break;
+        }
+    }
+
+    private void previousSymbolPage() {
+        if (numericMode) return;
+
+        page--;
+        if (page < 0) page = 2;
+
+        upper = false;
+        build();
+    }
+
+    private void nextSymbolPage() {
+        if (numericMode) return;
+
+        page++;
+        if (page > 2) page = 0;
+
+        upper = false;
+        build();
+    }
+
     private String badge(String action) {
         if (family == ControllerDetector.Family.PLAYSTATION) {
             switch (action) {
@@ -341,17 +692,17 @@ public class ConsoleKeyboardView extends BaseKeyboardView {
 
         hint.setTextAlign(Paint.Align.LEFT);
         c.drawText(
-                "🎮 " + name + "  •  D-pad: navegar  •  " + badge("confirm") + ": selecionar",
+                name + "   D-PAD navegar",
                 dp(12),
-                dp(20),
+                dp(16),
                 hint
         );
 
         hint.setTextAlign(Paint.Align.RIGHT);
         c.drawText(
-                badge("delete") + " apagar   " + badge("space") + " espaço   " + badge("done") + " concluir",
+                badge("back") + " voltar",
                 getWidth() - dp(12),
-                dp(20),
+                dp(16),
                 hint
         );
 
@@ -359,7 +710,23 @@ public class ConsoleKeyboardView extends BaseKeyboardView {
 
         for (int r=0; r<rows.size(); r++) {
             for (int col=0; col<rows.get(r).size(); col++) {
-                drawKey(c, rows.get(r).get(col), r == selRow && col == selCol);
+                Key key = rows.get(r).get(col);
+
+                boolean selected =
+                        r == selRow &&
+                        col == selCol;
+
+                drawKey(
+                        c,
+                        key,
+                        selected
+                );
+
+                drawActionBadges(
+                        c,
+                        key,
+                        selected
+                );
             }
         }
 
@@ -419,6 +786,25 @@ public class ConsoleKeyboardView extends BaseKeyboardView {
                     if (isLongPressPopupOpen()) return true;
                     selRow++;
                     clamp();
+                    return true;
+
+                case KeyEvent.KEYCODE_BUTTON_L2:
+                    if (!numericMode && page == 0) {
+                        feedbackAsync();
+                        flashAction(ACT_SHIFT);
+                        upper = !upper;
+                        build();
+                    }
+                    return true;
+
+                case KeyEvent.KEYCODE_BUTTON_L1:
+                    feedbackAsync();
+                    previousSymbolPage();
+                    return true;
+
+                case KeyEvent.KEYCODE_BUTTON_R1:
+                    feedbackAsync();
+                    nextSymbolPage();
                     return true;
 
                 case KeyEvent.KEYCODE_BUTTON_X:
