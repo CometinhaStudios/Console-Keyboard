@@ -16,6 +16,7 @@ import android.os.VibratorManager;
 import android.text.InputType;
 import android.view.InputDevice;
 import android.view.KeyEvent;
+import android.view.MotionEvent;
 import android.view.View;
 import android.view.inputmethod.EditorInfo;
 import android.view.inputmethod.InputConnection;
@@ -54,6 +55,7 @@ public class ConsoleImeService extends InputMethodService
 
     private boolean numericInput = false;
     private boolean correctionEnabled = false;
+    private boolean inputViewActive = false;
 
     private final ExecutorService hapticExecutor =
             Executors.newSingleThreadExecutor();
@@ -236,6 +238,8 @@ public class ConsoleImeService extends InputMethodService
                 restarting
         );
 
+        inputViewActive = true;
+
         int inputClass =
                 info == null
                         ? 0
@@ -274,7 +278,21 @@ public class ConsoleImeService extends InputMethodService
         }
     }
 
+    @Override public void onFinishInputView(
+            boolean finishingInput
+    ) {
+        inputViewActive = false;
+        clipboardPanelView = null;
+
+        super.onFinishInputView(
+                finishingInput
+        );
+    }
+
     @Override public void onFinishInput() {
+        inputViewActive = false;
+        clipboardPanelView = null;
+
         suggestionGeneration.incrementAndGet();
 
         mainHandler.removeCallbacks(
@@ -354,6 +372,22 @@ public class ConsoleImeService extends InputMethodService
                 InputType.TYPE_TEXT_VARIATION_WEB_EMAIL_ADDRESS &&
                 variation !=
                 InputType.TYPE_TEXT_VARIATION_URI;
+    }
+
+    private boolean shouldCaptureGamepad() {
+        if (!inputViewActive ||
+                !landscape() ||
+                !isInputViewShown()) {
+            return false;
+        }
+
+        if (clipboardPanelView != null) {
+            return true;
+        }
+
+        return keyboardView instanceof
+                ConsoleKeyboardView &&
+                keyboardView.isShown();
     }
 
     private void refreshController() {
@@ -498,6 +532,13 @@ public class ConsoleImeService extends InputMethodService
             int keyCode,
             KeyEvent event
     ) {
+        if (!shouldCaptureGamepad()) {
+            return super.onKeyDown(
+                    keyCode,
+                    event
+            );
+        }
+
         InputDevice d =
                 event.getDevice();
 
@@ -543,6 +584,13 @@ public class ConsoleImeService extends InputMethodService
             int keyCode,
             KeyEvent event
     ) {
+        if (!shouldCaptureGamepad()) {
+            return super.onKeyUp(
+                    keyCode,
+                    event
+            );
+        }
+
         InputDevice d =
                 event.getDevice();
 
@@ -569,6 +617,49 @@ public class ConsoleImeService extends InputMethodService
 
         return super.onKeyUp(
                 keyCode,
+                event
+        );
+    }
+
+    @Override public boolean onGenericMotionEvent(
+            MotionEvent event
+    ) {
+        if (!shouldCaptureGamepad()) {
+            return super.onGenericMotionEvent(
+                    event
+            );
+        }
+
+        InputDevice d =
+                event == null
+                        ? null
+                        : event.getDevice();
+
+        if (ControllerDetector.isGamepad(d) &&
+                keyboardView instanceof
+                ConsoleKeyboardView) {
+
+            activeControllerId =
+                    d.getId();
+
+            activeFamily =
+                    ControllerDetector.detect(d);
+
+            ConsoleKeyboardView v =
+                    (ConsoleKeyboardView)keyboardView;
+
+            v.setControllerFamily(
+                    activeFamily
+            );
+
+            if (v.handleGamepadMotion(
+                    event
+            )) {
+                return true;
+            }
+        }
+
+        return super.onGenericMotionEvent(
                 event
         );
     }
@@ -1320,6 +1411,8 @@ public class ConsoleImeService extends InputMethodService
     }
 
     @Override public void onHide() {
+        inputViewActive = false;
+        clipboardPanelView = null;
         requestHideSelf(0);
     }
 

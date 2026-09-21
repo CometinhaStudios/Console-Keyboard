@@ -4,6 +4,7 @@ import android.content.Context;
 import android.graphics.Canvas;
 import android.graphics.Color;
 import android.graphics.Paint;
+import android.os.SystemClock;
 import android.graphics.Path;
 import android.graphics.RectF;
 import android.graphics.Typeface;
@@ -35,6 +36,9 @@ public class ConsoleKeyboardView extends BaseKeyboardView {
     private final Paint suggestionText = new Paint(Paint.ANTI_ALIAS_FLAG);
     private final Paint suggestionDivider = new Paint(Paint.ANTI_ALIAS_FLAG);
     private boolean suggestionTouch = false;
+    private int motionDirX = 0;
+    private int motionDirY = 0;
+    private long lastMotionMoveMs = 0L;
 
     public ConsoleKeyboardView(Context c, Listener l) {
         this(c, l, false);
@@ -746,6 +750,155 @@ public class ConsoleKeyboardView extends BaseKeyboardView {
         invalidate();
     }
 
+    private void moveControllerSelection(
+            int dx,
+            int dy
+    ) {
+        if (dx < 0) {
+            if (isLongPressPopupOpen()) {
+                movePopupSelection(-1);
+                return;
+            }
+
+            selCol--;
+            clamp();
+            return;
+        }
+
+        if (dx > 0) {
+            if (isLongPressPopupOpen()) {
+                movePopupSelection(1);
+                return;
+            }
+
+            selCol++;
+            clamp();
+            return;
+        }
+
+        if (dy < 0) {
+            if (isLongPressPopupOpen()) {
+                return;
+            }
+
+            selRow--;
+            clamp();
+            return;
+        }
+
+        if (dy > 0) {
+            if (isLongPressPopupOpen()) {
+                return;
+            }
+
+            selRow++;
+            clamp();
+        }
+    }
+
+    public boolean handleGamepadMotion(
+            MotionEvent event
+    ) {
+        if (event == null ||
+                event.getActionMasked() !=
+                MotionEvent.ACTION_MOVE) {
+            return false;
+        }
+
+        InputDevice device =
+                event.getDevice();
+
+        if (!ControllerDetector.isGamepad(device)) {
+            return false;
+        }
+
+        float hatX =
+                event.getAxisValue(
+                        MotionEvent.AXIS_HAT_X
+                );
+
+        float hatY =
+                event.getAxisValue(
+                        MotionEvent.AXIS_HAT_Y
+                );
+
+        float axisX =
+                event.getAxisValue(
+                        MotionEvent.AXIS_X
+                );
+
+        float axisY =
+                event.getAxisValue(
+                        MotionEvent.AXIS_Y
+                );
+
+        float x =
+                Math.abs(hatX) >= 0.45f
+                        ? hatX
+                        : axisX;
+
+        float y =
+                Math.abs(hatY) >= 0.45f
+                        ? hatY
+                        : axisY;
+
+        final float deadZone = 0.58f;
+
+        int dirX =
+                x > deadZone
+                        ? 1
+                        : x < -deadZone
+                        ? -1
+                        : 0;
+
+        int dirY =
+                y > deadZone
+                        ? 1
+                        : y < -deadZone
+                        ? -1
+                        : 0;
+
+        if (dirX == 0 &&
+                dirY == 0) {
+            motionDirX = 0;
+            motionDirY = 0;
+            lastMotionMoveMs = 0L;
+            return true;
+        }
+
+        if (dirX != 0 &&
+                dirY != 0) {
+            if (Math.abs(x) >=
+                    Math.abs(y)) {
+                dirY = 0;
+            } else {
+                dirX = 0;
+            }
+        }
+
+        long now =
+                SystemClock.uptimeMillis();
+
+        boolean changed =
+                dirX != motionDirX ||
+                dirY != motionDirY;
+
+        if (changed ||
+                now - lastMotionMoveMs >= 135L) {
+
+            motionDirX = dirX;
+            motionDirY = dirY;
+            lastMotionMoveMs = now;
+
+            moveControllerSelection(
+                    dirX,
+                    dirY
+            );
+        }
+
+        return true;
+    }
+
     private boolean confirmCode(int code) {
         return code == KeyEvent.KEYCODE_BUTTON_A ||
                code == KeyEvent.KEYCODE_ENTER ||
@@ -765,27 +918,19 @@ public class ConsoleKeyboardView extends BaseKeyboardView {
 
             switch (code) {
                 case KeyEvent.KEYCODE_DPAD_LEFT:
-                    if (isLongPressPopupOpen()) return movePopupSelection(-1);
-                    selCol--;
-                    clamp();
+                    moveControllerSelection(-1, 0);
                     return true;
 
                 case KeyEvent.KEYCODE_DPAD_RIGHT:
-                    if (isLongPressPopupOpen()) return movePopupSelection(1);
-                    selCol++;
-                    clamp();
+                    moveControllerSelection(1, 0);
                     return true;
 
                 case KeyEvent.KEYCODE_DPAD_UP:
-                    if (isLongPressPopupOpen()) return true;
-                    selRow--;
-                    clamp();
+                    moveControllerSelection(0, -1);
                     return true;
 
                 case KeyEvent.KEYCODE_DPAD_DOWN:
-                    if (isLongPressPopupOpen()) return true;
-                    selRow++;
-                    clamp();
+                    moveControllerSelection(0, 1);
                     return true;
 
                 case KeyEvent.KEYCODE_BUTTON_L2:
