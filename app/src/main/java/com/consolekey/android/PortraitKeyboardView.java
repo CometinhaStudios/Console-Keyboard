@@ -103,6 +103,10 @@ public class PortraitKeyboardView extends BaseKeyboardView {
         rebuild();
     }
 
+    @Override protected boolean fastTouchMode() {
+        return !emojiMode;
+    }
+
     private Key letterKey(String value) {
         String label = upper ? value.toUpperCase(Locale.ROOT) : value;
 
@@ -740,19 +744,21 @@ public class PortraitKeyboardView extends BaseKeyboardView {
     }
 
     @Override public boolean onTouchEvent(MotionEvent e) {
-        if (!emojiMode && e.getAction() == MotionEvent.ACTION_UP && e.getY() < toolbarH) {
-            float seg = getWidth() / 5f;
-            int i = Math.min(4, (int)(e.getX() / seg));
+        if (!emojiMode && e.getY() < toolbarH) {
+            if (e.getActionMasked() == MotionEvent.ACTION_UP) {
+                float seg = getWidth() / 5f;
+                int i = Math.min(4, (int)(e.getX() / seg));
 
-            feedbackAsync();
+                feedbackAsync();
 
-            if (i == 0) {
-                emojiMode = true;
-                emojiCategory = 2;
-                resetEmojiScroll();
-                rebuildEmoji();
-            } else if (i == 3) {
-                listener.onOpenSettings();
+                if (i == 0) {
+                    emojiMode = true;
+                    emojiCategory = 2;
+                    resetEmojiScroll();
+                    rebuildEmoji();
+                } else if (i == 3) {
+                    listener.onOpenSettings();
+                }
             }
 
             return true;

@@ -5,6 +5,7 @@ import android.graphics.Canvas;
 import android.graphics.Color;
 import android.graphics.Paint;
 import android.graphics.RectF;
+import android.util.SparseArray;
 import android.view.MotionEvent;
 import android.view.View;
 
@@ -20,6 +21,7 @@ public abstract class BaseKeyboardView extends View {
         void onHide();
         void onKeyFeedback();
         void onOpenSettings();
+        void onReplaceLast(String oldText, String newText);
     }
 
     protected static class Key {
@@ -40,6 +42,24 @@ public abstract class BaseKeyboardView extends View {
             this.repeatable = repeatable;
         }
     }
+
+    private static class FastTouchState {
+        final int pointerId;
+        final Key key;
+        final float downX;
+        final float downY;
+        Runnable holdRunnable;
+        Runnable repeatRunnable;
+        boolean longPressOpened = false;
+
+        FastTouchState(int pointerId, Key key, float downX, float downY) {
+            this.pointerId = pointerId;
+            this.key = key;
+            this.downX = downX;
+            this.downY = downY;
+        }
+    }
+
 
     protected final Paint fill = new Paint(Paint.ANTI_ALIAS_FLAG);
     protected final Paint text = new Paint(Paint.ANTI_ALIAS_FLAG);
@@ -69,6 +89,9 @@ public abstract class BaseKeyboardView extends View {
 
     private Runnable longPressRunnable;
     private Runnable repeatRunnable;
+
+    private final SparseArray<FastTouchState> fastTouches = new SparseArray<>();
+    private int fastPopupPointerId = -1;
 
     public static final int ACT_TEXT=0, ACT_BACKSPACE=1, ACT_ENTER=2, ACT_SPACE=3, ACT_SHIFT=4, ACT_SYMBOLS=5, ACT_HIDE=6;
 
@@ -141,6 +164,10 @@ public abstract class BaseKeyboardView extends View {
         return new Key(label, value, weight, action, new String[0], true);
     }
 
+    protected boolean fastTouchMode() {
+        return true;
+    }
+
     protected void flashKey(Key key) {
         if (key == null) return;
         pressedKey = key;
@@ -150,7 +177,7 @@ public abstract class BaseKeyboardView extends View {
                 pressedKey = null;
                 invalidate();
             }
-        }, 58);
+        }, 52);
     }
 
     protected void flashAction(int action) {
@@ -287,6 +314,53 @@ public abstract class BaseKeyboardView extends View {
             }
         }
         return null;
+    }
+
+
+    private Key hitForgiving(float x, float y) {
+        Key exact = hit(x, y);
+        if (exact != null) return exact;
+        if (rows.isEmpty()) return null;
+
+        float minTop = Float.MAX_VALUE;
+        float maxBottom = -Float.MAX_VALUE;
+
+        for (List<Key> row : rows) {
+            for (Key key : row) {
+                minTop = Math.min(minTop, key.rect.top);
+                maxBottom = Math.max(maxBottom, key.rect.bottom);
+            }
+        }
+
+        if (y < minTop - dp(3) || y > maxBottom + dp(3)) return null;
+
+        Key best = null;
+        float bestDistance = Float.MAX_VALUE;
+        float maxDistance = dp(16);
+        float maxDistanceSq = maxDistance * maxDistance;
+
+        for (List<Key> row : rows) {
+            for (Key key : row) {
+                float dx =
+                        x < key.rect.left ? key.rect.left - x :
+                        x > key.rect.right ? x - key.rect.right :
+                        0f;
+
+                float dy =
+                        y < key.rect.top ? key.rect.top - y :
+                        y > key.rect.bottom ? y - key.rect.bottom :
+                        0f;
+
+                float d = dx * dx + dy * dy;
+
+                if (d < bestDistance && d <= maxDistanceSq) {
+                    bestDistance = d;
+                    best = key;
+                }
+            }
+        }
+
+        return best;
     }
 
     private int longPressDelayMs() {
@@ -435,7 +509,204 @@ public abstract class BaseKeyboardView extends View {
         }
     }
 
-    @Override public boolean onTouchEvent(MotionEvent e) {
+
+    private void cancelFastTimers(FastTouchState state) {
+        if (state == null) return;
+
+        if (state.holdRunnable != null) {
+            removeCallbacks(state.holdRunnable);
+            state.holdRunnable = null;
+        }
+
+        if (state.repeatRunnable != null) {
+            removeCallbacks(state.repeatRunnable);
+            state.repeatRunnable = null;
+        }
+    }
+
+    private void cancelFastLongPressCandidates() {
+        for (int i = 0; i < fastTouches.size(); i++) {
+            FastTouchState state = fastTouches.valueAt(i);
+
+            if (state.holdRunnable != null && !state.longPressOpened) {
+                removeCallbacks(state.holdRunnable);
+                state.holdRunnable = null;
+            }
+        }
+    }
+
+    private void closeFastPopup() {
+        popupVisible = false;
+        popupKey = null;
+        popupOptions = new String[0];
+        popupIndex = 0;
+        popupCellWidth = 0f;
+        fastPopupPointerId = -1;
+    }
+
+    private void scheduleFastHold(FastTouchState state) {
+        if (state == null || state.key == null) return;
+
+        Key key = state.key;
+
+        if (key.repeatable && key.action == ACT_BACKSPACE) {
+            state.holdRunnable = () -> {
+                if (fastTouches.get(state.pointerId) != state) return;
+
+                state.repeatRunnable = new Runnable() {
+                    @Override public void run() {
+                        if (fastTouches.get(state.pointerId) != state) return;
+                        if (listener != null) listener.onBackspace();
+                        postDelayed(this, 48);
+                    }
+                };
+
+                post(state.repeatRunnable);
+            };
+
+            postDelayed(state.holdRunnable, Math.max(250, longPressDelayMs()));
+            return;
+        }
+
+        if (key.action == ACT_TEXT && key.longPress.length > 0) {
+            state.holdRunnable = () -> {
+                if (fastTouches.get(state.pointerId) != state) return;
+                if (fastTouches.size() != 1) return;
+                if (popupVisible) return;
+
+                state.longPressOpened = true;
+                fastPopupPointerId = state.pointerId;
+
+                popupVisible = true;
+                popupKey = key;
+                popupOptions = key.longPress;
+                popupIndex = 0;
+
+                feedbackAsync();
+                invalidate();
+            };
+
+            postDelayed(state.holdRunnable, longPressDelayMs());
+        }
+    }
+
+    private void fastPointerDown(MotionEvent e, int index) {
+        int pointerId = e.getPointerId(index);
+
+        if (popupVisible && fastPopupPointerId >= 0) return;
+
+        float x = e.getX(index);
+        float y = e.getY(index);
+
+        Key key = hitForgiving(x, y);
+        if (key == null) return;
+
+        if (fastTouches.size() > 0) {
+            cancelFastLongPressCandidates();
+        }
+
+        FastTouchState state = new FastTouchState(pointerId, key, x, y);
+        fastTouches.put(pointerId, state);
+
+        // A tecla entra imediatamente no DOWN / POINTER_DOWN.
+        perform(key);
+
+        scheduleFastHold(state);
+    }
+
+    private void fastPointerMove(MotionEvent e) {
+        if (popupVisible && fastPopupPointerId >= 0) {
+            int index = e.findPointerIndex(fastPopupPointerId);
+            if (index >= 0) updatePopupSelection(e.getX(index));
+            return;
+        }
+
+        float cancelDistance = dp(22);
+        float cancelDistanceSq = cancelDistance * cancelDistance;
+
+        for (int i = 0; i < fastTouches.size(); i++) {
+            FastTouchState state = fastTouches.valueAt(i);
+            int index = e.findPointerIndex(state.pointerId);
+            if (index < 0) continue;
+
+            float dx = e.getX(index) - state.downX;
+            float dy = e.getY(index) - state.downY;
+
+            if (dx * dx + dy * dy > cancelDistanceSq &&
+                    state.holdRunnable != null &&
+                    !state.longPressOpened) {
+
+                removeCallbacks(state.holdRunnable);
+                state.holdRunnable = null;
+            }
+        }
+    }
+
+    private void fastPointerUp(MotionEvent e, int index) {
+        int pointerId = e.getPointerId(index);
+        FastTouchState state = fastTouches.get(pointerId);
+
+        if (state == null) return;
+
+        cancelFastTimers(state);
+
+        if (state.longPressOpened &&
+                fastPopupPointerId == pointerId &&
+                popupVisible &&
+                popupOptions.length > 0) {
+
+            String selected = popupOptions[popupIndex];
+            String original = state.key.value;
+
+            closeFastPopup();
+
+            if (listener != null) {
+                listener.onReplaceLast(original, selected);
+            }
+
+            feedbackAsync();
+        }
+
+        fastTouches.remove(pointerId);
+        invalidate();
+    }
+
+    private void clearFastTouches() {
+        for (int i = 0; i < fastTouches.size(); i++) {
+            cancelFastTimers(fastTouches.valueAt(i));
+        }
+
+        fastTouches.clear();
+        closeFastPopup();
+        pressedKey = null;
+        invalidate();
+    }
+
+    private boolean fastTouchEvent(MotionEvent e) {
+        switch (e.getActionMasked()) {
+            case MotionEvent.ACTION_DOWN:
+            case MotionEvent.ACTION_POINTER_DOWN:
+                fastPointerDown(e, e.getActionIndex());
+                return true;
+
+            case MotionEvent.ACTION_MOVE:
+                fastPointerMove(e);
+                return true;
+
+            case MotionEvent.ACTION_POINTER_UP:
+            case MotionEvent.ACTION_UP:
+                fastPointerUp(e, e.getActionIndex());
+                return true;
+
+            case MotionEvent.ACTION_CANCEL:
+                clearFastTouches();
+                return true;
+        }
+
+        return true;
+    }
+
+    private boolean legacyTouchEvent(MotionEvent e) {
         switch (e.getActionMasked()) {
             case MotionEvent.ACTION_DOWN: {
                 downKey = hit(e.getX(), e.getY());
@@ -501,4 +772,13 @@ public abstract class BaseKeyboardView extends View {
 
         return true;
     }
+
+    @Override public boolean onTouchEvent(MotionEvent e) {
+        if (fastTouchMode()) {
+            return fastTouchEvent(e);
+        }
+
+        return legacyTouchEvent(e);
+    }
+
 }

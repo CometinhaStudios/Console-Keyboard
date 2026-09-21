@@ -235,6 +235,19 @@ public class ConsoleImeService extends InputMethodService implements InputManage
         if (c != null) c.commitText(text, 1);
     }
 
+    @Override public void onReplaceLast(String oldText, String newText) {
+        InputConnection c = ic();
+        if (c == null || newText == null) return;
+
+        int oldLength = oldText == null ? 0 : oldText.length();
+
+        if (oldLength > 0) {
+            c.deleteSurroundingText(oldLength, 0);
+        }
+
+        c.commitText(newText, 1);
+    }
+
     @Override public void onBackspace() {
         InputConnection c = ic();
         if (c != null) c.deleteSurroundingText(1, 0);
