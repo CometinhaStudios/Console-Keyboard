@@ -154,10 +154,10 @@ diagnostic_method = r'''
         renderSpaceLine();
 
         boolean hasDestination = title.home != null || chosenFolder != null || defaultFolder != null;
-        PUi.Action import = PUi.action(a, R.drawable.ic_build, "Import for analysis", PUi.Kind.PRIMARY,
+        PUi.Action importAction = PUi.action(a, R.drawable.ic_build, "Import for analysis", PUi.Kind.PRIMARY,
                 Haptics.on(Haptics.Word.CLICK, v -> startDiagnosticImport()));
-        import.setEnabled(!building && b != null && !baseGone && !needKeys && hasDestination);
-        PUi.add(box, import, 12, PUi.fill());
+        importAction.setEnabled(!building && b != null && !baseGone && !needKeys && hasDestination);
+        PUi.add(box, importAction, 12, PUi.fill());
         PUi.add(box, PUi.button(a, "Share diagnostic report", PUi.Kind.QUIET,
                 Haptics.on(Haptics.Word.CLICK, v -> BuildLogUi.share(a, title.titleId, title.name))), 8, PUi.wrap());
     }
