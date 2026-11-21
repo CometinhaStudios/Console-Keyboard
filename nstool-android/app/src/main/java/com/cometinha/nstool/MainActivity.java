@@ -15,7 +15,7 @@ public class MainActivity extends Activity {
  Uri gameUri,keysUri,destUri; File gameFile,keysFile;
  public void onCreate(Bundle b){super.onCreate(b);
   LinearLayout root=new LinearLayout(this);root.setOrientation(1);root.setPadding(24,24,24,24);
-  TextView title=new TextView(this);title.setText("NSTool Android • ARM64 Beta 2");title.setTextSize(23);root.addView(title);
+  TextView title=new TextView(this);title.setText("NSTool Android • ARM64 Beta 3");title.setTextSize(23);root.addView(title);
   TextView note=new TextView(this);note.setText("Leitor e extrator NSP/NCA. Escolha a pasta onde salvar os arquivos extraídos.");root.addView(note);
   gameBtn=btn(root,"1. Selecionar arquivo NSP");keysBtn=btn(root,"2. Selecionar chaves (opcional)");destBtn=btn(root,"3. Escolher pasta de destino");scanBtn=btn(root,"Analisar estrutura e metadados");extractBtn=btn(root,"Extrair para pasta escolhida");
   status=new TextView(this);status.setText("Aguardando NSP.");root.addView(status);
