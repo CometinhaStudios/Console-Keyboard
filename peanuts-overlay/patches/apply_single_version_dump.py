@@ -128,3 +128,102 @@ replace_once(
 )
 
 print("Applied one-version NSTool dump support to Android and Python packers, with regression tests.")
+
+# Beta 3: do not turn Android storage denial into a false "one version's folder".
+replace_once(
+    "android/app/src/main/java/dev/nxnative/android/DumpLayout.java",
+    """    /** What {@link #find} found: the game and the version Prepare starts from with its modules' build IDs, or why there is none (error, a sentence) */
+    static final class Found {""",
+    """    /**
+     * Detect access denial before layout checks. File.isFile()/listFiles() silently return false/null
+     * for some EACCES cases, which otherwise looks exactly like a missing one-version layout.
+     */
+    static String accessProblem(File dump) {
+        if (dump == null) return null;
+        if (Nup.isNup(dump)) {
+            if (dump.exists() && !dump.canRead()) return "no_storage_permission: cannot read " + dump + ". Allow All files access for this app.";
+            return null;
+        }
+        if (!dump.exists()) return null;
+        if (!dump.canRead() || (dump.isDirectory() && dump.list() == null))
+            return "no_storage_permission: cannot list dump folder " + dump + ". Allow All files access for this app.";
+        File[] versions = { new File(dump, "base"), dump };
+        for (File version : versions) {
+            File pkg = root(version);
+            File exefs = new File(pkg, "exefs");
+            if (exefs.exists() && exefs.isDirectory()) {
+                String[] names = exefs.list();
+                if (names == null) return "no_storage_permission: cannot list " + exefs + ". Allow All files access for this app.";
+                for (String name : new String[] {"main", "main.npdm"}) {
+                    boolean listed = java.util.Arrays.asList(names).contains(name);
+                    File file = new File(exefs, name);
+                    if (listed || file.exists()) {
+                        try (java.io.FileInputStream in = new java.io.FileInputStream(file)) { in.read(); }
+                        catch (IOException e) {
+                            String why = String.valueOf(e.getMessage()).toLowerCase(Locale.ROOT);
+                            if (why.contains("eacces") || why.contains("permission denied") || e instanceof java.nio.file.AccessDeniedException)
+                                return "no_storage_permission: cannot read " + file + ": " + e.getMessage() + ". Allow All files access for this app.";
+                        }
+                    }
+                }
+            }
+            File romfs = new File(pkg, "romfs");
+            if (romfs.exists() && romfs.isDirectory() && (!romfs.canRead() || romfs.list() == null))
+                return "no_storage_permission: cannot list " + romfs + ". Allow All files access for this app.";
+        }
+        return null;
+    }
+
+    /** What {@link #find} found: the game and the version Prepare starts from with its modules' build IDs, or why there is none (error, a sentence) */
+    static final class Found {""",
+)
+replace_once(
+    "android/app/src/main/java/dev/nxnative/android/DumpLayout.java",
+    """    private static String find(Found f, File dump, boolean anyBuild) {
+        String fn = dump.getName();""",
+    """    private static String find(Found f, File dump, boolean anyBuild) {
+        String access = accessProblem(dump);
+        if (access != null) return access;
+        String fn = dump.getName();""",
+)
+replace_once(
+    "android/app/src/main/java/dev/nxnative/android/Pack.java",
+    """        File npdm = npdmOf(game);
+        if (npdm == null) throw new IOException(game + " has no main.npdm (base/exefs/, updates/<version>/exefs/ or exefs/).");""",
+    """        String access = DumpLayout.accessProblem(game);
+        if (access != null) throw new IOException(access);
+        File npdm = npdmOf(game);
+        if (npdm == null) throw new IOException(game + " has no main.npdm (base/exefs/, updates/<version>/exefs/ or exefs/).");""",
+)
+replace_once(
+    "android/app/src/main/java/dev/nxnative/android/MainActivity.java",
+    """    boolean needAccess() {
+        if (Environment.isExternalStorageManager()) return false;
+        new PadFocus.Builder(this).setTitle("Allow file access").setMessage("The app needs All files access to read your game dump. Allow it, then come back.")
+                .setPositiveButton("Open settings", (d, w) -> openAccessSettings()).setNegativeButton("Cancel", null).show();
+        return true;
+    }""",
+    """    boolean needAccess() {
+        if (Environment.isExternalStorageManager()) return false;
+        android.util.Log.w("nxnative", "[RED] no_storage_permission: package " + getPackageName() + " needs MANAGE_EXTERNAL_STORAGE");
+        new PadFocus.Builder(this).setTitle("Allow All files access")
+                .setMessage("Allow 'Acesso a todos os arquivos' for this app (package " + getPackageName() + "), then return and try again.")
+                .setPositiveButton("Open app settings", (d, w) -> openAccessSettings()).setNegativeButton("Cancel", null).show();
+        return true;
+    }""",
+)
+replace_once(
+    "android/app/src/main/java/dev/nxnative/android/MainActivity.java",
+    """    void gamePicked(File game) {
+        if (relinkFor != null) { Game g = relinkFor; relinkFor = null; relinkTo(g, game); return; }""",
+    """    void gamePicked(File game) {
+        if (relinkFor != null) { Game g = relinkFor; relinkFor = null; relinkTo(g, game); return; }
+        if (needAccess(game)) return;""",
+)
+replace_once(
+    "android/app/src/ondevice/java/dev/nxnative/android/Ondevice.java",
+    """    static void prepare(MainActivity a, File dump, boolean again) { if (panel != null && panel.a == a) panel.picked(dump, false, null, again); }""",
+    """    static void prepare(MainActivity a, File dump, boolean again) {
+        if (panel != null && panel.a == a && !a.needAccess(dump)) panel.picked(dump, false, null, again);
+    }""",
+)
