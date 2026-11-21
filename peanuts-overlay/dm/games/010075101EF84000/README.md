@@ -12,6 +12,11 @@ This folder adds Stray's base title ID and the verified module build IDs from th
 
 The profile's `build` row uses the first 16 bytes of each 20-byte NSO Build ID, matching the 32-hex build-ID format used by Peanuts profiles.
 
+## Provisional bring-up defaults
+- Public metadata for the matching Hk_project Unreal project declares EngineAssociation 4.27. The memory region values follow existing Peanuts UE4.27 profiles (DRAGON QUEST III / VII); they are starting defaults, not Stray measurements.
+- The app-pool region is 0xCD500000; the NPDM system-resource field was not present in the supplied report, so the Peanuts default remains in effect until the raw NPDM can be inspected.
+- Shader archive grouping follows the common UE4.27 archive naming used by other profiles, but the exact archive names and contents inside Stray's PAK remain unverified.
+
 ## Not yet supported / not validated
 - No `shader_map.tsv`, `shader_facts.tsv`, `shader_pairs.tsv` or `pso_pairs.tsv` are included. These must be generated from the user's local dump and the real Unreal shader archives; do not create placeholder shader rows.
 - Stray's shaders are expected in the Unreal PAK. The official Peanuts Native NEW-GAME guide says Unreal shader archives may require the game's own Oodle decoding or the on-device UE shader path. Whether this exact Stray PAK is readable by the current decoder has not been tested.
