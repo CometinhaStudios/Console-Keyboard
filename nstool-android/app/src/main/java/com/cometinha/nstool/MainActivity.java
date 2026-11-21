@@ -24,7 +24,7 @@ public class MainActivity extends Activity {
   root.setOrientation(1);
   root.setPadding(24,24,24,24);
   TextView title=new TextView(this);
-  title.setText("NSTool Android • ARM64 Beta 5");
+  title.setText("NSTool Android • ARM64 Beta 6");
   title.setTextSize(23);
   root.addView(title);
   TextView note=new TextView(this);
@@ -253,7 +253,7 @@ public class MainActivity extends Activity {
  }
 
 
- // ===== Beta 5: extração do conteúdo de um NCA =====
+ // ===== Beta 6: extração do conteúdo de um NCA =====
  static byte[] hex(String h){
   int n=h.length()/2;byte[] r=new byte[n];
   for(int i=0;i<n;i++)r[i]=(byte)Integer.parseInt(h.substring(2*i,2*i+2),16);
@@ -285,12 +285,18 @@ public class MainActivity extends Activity {
    while(o<t.length&&(n=in.read(t,o,t.length-o))>0)o+=n;
   }
   if(t.length<0x2C0-0x140)throw new IOException(".tik pequeno demais ("+t.length+" bytes).");
-  long sig=(t[0]&0xffL)|((t[1]&0xffL)<<8)|((t[2]&0xffL)<<16)|((t[3]&0xffL)<<24);
-  int d;
+  // O tipo de assinatura do .tik é big-endian (ex.: 00 01 00 04 = 0x010004).
+  long sig=((t[0]&0xffL)<<24)|((t[1]&0xffL)<<16)|((t[2]&0xffL)<<8)|(t[3]&0xffL);
+  int d=-1;
   if(sig==0x010000||sig==0x010003)d=4+0x200+0x3C;
   else if(sig==0x010001||sig==0x010004)d=4+0x100+0x3C;
   else if(sig==0x010002||sig==0x010005)d=4+0x3C+0x40;
-  else throw new IOException("Tipo de assinatura de ticket desconhecido: 0x"+Long.toHexString(sig));
+  // Os dados do ticket têm 0x180 bytes; se o tamanho do arquivo não bater com o tipo, confia no tamanho.
+  int byLen=t.length-0x180;
+  if(d<0||d+0x180>t.length||(byLen>=0x80&&byLen!=d&&t.length<=0x2C0)){
+   if(byLen<0x80)throw new IOException("Tipo de assinatura de ticket desconhecido: 0x"+Long.toHexString(sig)+" e tamanho "+t.length+" inesperado.");
+   d=byLen;
+  }
   if(t.length<d+0x170)throw new IOException(".tik truncado.");
   int keyType=t[d+0x141]&0xff;
   int rev=t[d+0x145]&0xff;
@@ -388,7 +394,7 @@ public class MainActivity extends Activity {
      titleKeyVariants.add(null); // usa o title.keys escolhido pelo usuário
     }
     final String tkInfoF=tkInfo;
-    append(log,"=== Beta 5 / extração de NCA ===\n"+tkInfo+"\n");
+    append(log,"=== Beta 6 / extração de NCA ===\n"+tkInfo+"\n");
 
     // detecta as opções do NSTool
     File helpLog=new File(work,"help.log");
