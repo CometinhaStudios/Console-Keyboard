@@ -47,25 +47,25 @@ patch(
 # copy game contents; the existing shareable build log carries the compact report.
 service = ROOT / "android/app/src/main/java/dev/peanuts/build/BuildService.java"
 src = service.read_text(encoding="utf-8")
-src = src.replace('            File dump = stepImport(r);\\n',
-                  '            File dump = r.importOnly ? stepDiagnostic(r) : stepImport(r);\\n', 1)
+src = src.replace('            File dump = stepImport(r);\n',
+                  '            File dump = r.importOnly ? stepDiagnostic(r) : stepImport(r);\n', 1)
 if src.count('r.importOnly ? stepDiagnostic(r) : stepImport(r);') != 1:
     raise SystemExit("BuildService.java: diagnostic scan dispatch was not inserted")
-start = '            File dump = r.importOnly ? stepDiagnostic(r) : stepImport(r);\\n'
-end = '            progress("done", 100, message);\\n'
+start = '            File dump = r.importOnly ? stepDiagnostic(r) : stepImport(r);\n'
+end = '            progress("done", 100, message);\n'
 i = src.index(start)
 j = src.index(end, i) + len(end)
 old_block = src[i + len(start):j]
 new_block = (
     start
-    + '            if (r.importOnly) {\\n'
-    + '                ok = true;\\n'
-    + '                message = name + " analysis complete. A compact metadata report was added to Share diagnostic report. No .nup or game copy was created.";\\n'
-    + '                log("diagnostic scan complete; no .nup was created and no game payload was copied");\\n'
-    + '                progress("done", 100, message);\\n'
-    + '            } else {\\n'
+    + '            if (r.importOnly) {\n'
+    + '                ok = true;\n'
+    + '                message = name + " analysis complete. A compact metadata report was added to Share diagnostic report. No .nup or game copy was created.";\n'
+    + '                log("diagnostic scan complete; no .nup was created and no game payload was copied");\n'
+    + '                progress("done", 100, message);\n'
+    + '            } else {\n'
     + old_block
-    + '            }\\n'
+    + '            }\n'
 )
 src = src[:i] + new_block + src[j:]
 service.write_text(src, encoding="utf-8")
@@ -73,7 +73,7 @@ print("patched BuildService.java diagnostic scan branch")
 
 # Add a metadata-only scanner using the importer's existing native probe. This reads the selected
 # NSP/XCI in place and logs CNMT/NACP-derived title data; it never calls writeNup.
-needle = '    /** (a) the .nup from an NSP/XCI, or the base as it is */\\n'
+needle = '    /** (a) the .nup from an NSP/XCI, or the base as it is */\n'
 method = r'''
     /** Read title metadata from the owner's NSP/XCI in place; never create or copy a .nup. */
     private File stepDiagnostic(BuildRequest r) throws IOException {
