@@ -12,8 +12,8 @@ permissions:
   contents: read
 
 concurrency:
-  group: peanuts-diagnostic-${{ github.ref }}
-  cancel-in-progress: false
+  group: peanuts-diagnostic-final-${{ github.ref }}
+  cancel-in-progress: true
 
 jobs:
   build:
