@@ -83,7 +83,7 @@ jobs:
       - name: Build the real on-device packer stage (Linux)
         shell: bash -el {0}
         run: |
-          zsh peanuts/scripts/ondevice-stage.sh "$RUNNER_TEMP/peanuts-pack" all
+          zsh peanuts/peanuts/scripts/ondevice-stage.sh "$RUNNER_TEMP/peanuts-pack" all
           test -s "$RUNNER_TEMP/peanuts-pack/stage/lib/libpython3.14.so"
           test -s "$RUNNER_TEMP/peanuts-pack/stage/lib/libnxpack.so"
           test -s "$RUNNER_TEMP/peanuts-pack/stage/lib/libdmsh_xlate.so"
