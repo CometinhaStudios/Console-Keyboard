@@ -37,7 +37,13 @@ public class MainActivity extends Activity {
    if(keysUri!=null&&(keysFile==null||!keysFile.exists()))keysFile=copy(keysUri,"keys.dat");
    File bin=new File(getFilesDir(),"nstool");if(!bin.exists()){try(InputStream i=getAssets().open("nstool");OutputStream o=new FileOutputStream(bin)){byte[]b=new byte[65536];int n;while((n=i.read(b))>0)o.write(b,0,n);}bin.setExecutable(true);}
    File work=new File(getCacheDir(),extract?"extract-work":"scan-work");if(work.exists())deleteTree(work);work.mkdirs();File log=new File(work,"nstool.log");
-   ProcessBuilder pb=extract?new ProcessBuilder(bin.getAbsolutePath(),"-x",new File(work,"contents").getAbsolutePath(),gameFile.getAbsolutePath()):new ProcessBuilder(bin.getAbsolutePath(),"-v","--showlayout","--fstree",gameFile.getAbsolutePath());
+   java.util.ArrayList<String> args=new java.util.ArrayList<>();
+   args.add(bin.getAbsolutePath());
+   if(keysFile!=null&&keysFile.exists()){args.add("-k");args.add(keysFile.getAbsolutePath());}
+   if(extract){args.add("-x");args.add(new File(work,"contents").getAbsolutePath());}
+   else{args.add("-v");args.add("--showlayout");args.add("--fstree");}
+   args.add(gameFile.getAbsolutePath());
+   ProcessBuilder pb=new ProcessBuilder(args);
    pb.redirectErrorStream(true);pb.redirectOutput(log);int code=pb.start().waitFor();
    if(extract&&code==0){DocumentFile root=DocumentFile.fromTreeUri(this,destUri);DocumentFile folder=root.createDirectory("NSTool-Extracted");if(folder==null)folder=root;copyTree(new File(work,"contents"),folder);}
    String msg=read(log);runOnUiThread(()->{status.setText("Código NSTool: "+code+(extract&&code==0?" • extração copiada para a pasta escolhida":""));output.setText(msg);scanBtn.setEnabled(true);extractBtn.setEnabled(true);});
