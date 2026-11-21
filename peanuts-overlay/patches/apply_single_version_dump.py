@@ -214,7 +214,7 @@ replace_once(
 )
 replace_once(
     "android/app/src/main/java/dev/nxnative/android/MainActivity.java",
-    """    void gamePicked(File game) {
+    """    private void gamePicked(File game) {
         if (relinkFor != null) { Game g = relinkFor; relinkFor = null; relinkTo(g, game); return; }""",
     """    void gamePicked(File game) {
         if (relinkFor != null) { Game g = relinkFor; relinkFor = null; relinkTo(g, game); return; }
