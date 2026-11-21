@@ -22,7 +22,7 @@ def replace_once(relpath: str, old: str, new: str) -> None:
 
 replace_once(
     "android/app/src/main/java/dev/nxnative/android/DumpLayout.java",
-    '                if (new File(root(new File(dump, "base")), "exefs/main").isFile()) out.add(0L);   // a one-version folder (exefs/ at its top has no version number: not here',
+    '                if (new File(root(new File(dump, "base")), "exefs/main").isFile()) out.add(0L);   // a one-version folder (exefs/ at its top) has no version number: not here',
     '''                File base = new File(dump, "base");
                 File direct = root(dump);
                 if (new File(root(base), "exefs/main").isFile()) out.add(0L);
