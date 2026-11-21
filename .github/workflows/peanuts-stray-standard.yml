@@ -1,0 +1,96 @@
+name: Peanuts Native — Stray standard-source build
+
+on:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: peanuts-stray-standard-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  build:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 120
+    steps:
+      - name: Checkout this repository (Stray profile overlay)
+        uses: actions/checkout@v4
+        with:
+          ref: stray-peanuts-standard
+          path: overlay
+          persist-credentials: false
+
+      - name: Checkout unmodified Peanuts Native source
+        uses: actions/checkout@v4
+        with:
+          repository: igawa6/peanuts-native
+          ref: v0.1.6-1
+          path: peanuts
+          persist-credentials: false
+
+      - name: Add only the provisional Stray profile
+        run: |
+          mkdir -p peanuts/dm/games/010075101EF84000
+          cp overlay/peanuts-overlay/dm/games/010075101EF84000/game.tsv peanuts/dm/games/010075101EF84000/game.tsv
+          cp overlay/peanuts-overlay/dm/games/010075101EF84000/README.md peanuts/dm/games/010075101EF84000/README.md
+          test -s peanuts/dm/games/010075101EF84000/game.tsv
+          grep -q $'title_id\t010075101EF84000' peanuts/dm/games/010075101EF84000/game.tsv
+
+      - name: Set up JDK 21
+        uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '21'
+          cache: gradle
+          cache-dependency-path: peanuts/android/app/gradle/wrapper/gradle-wrapper.properties
+
+      - name: Set up Android SDK
+        uses: android-actions/setup-android@v4
+
+      - name: Install Android SDK, NDK and CMake
+        run: |
+          yes | sdkmanager --licenses >/dev/null
+          sdkmanager --install \
+            "platforms;android-36" \
+            "build-tools;36.0.0" \
+            "ndk;28.2.13676358" \
+            "cmake;3.22.1"
+
+      - name: Set up Peanuts build environment
+        uses: mamba-org/setup-micromamba@v2
+        with:
+          environment-file: peanuts/android/environment.yml
+          environment-name: peanuts-build
+          cache-environment: true
+          init-shell: bash
+
+      - name: Build standard Peanuts APK with Stray profile
+        shell: bash -el {0}
+        working-directory: peanuts/android/app
+        run: |
+          chmod +x ./gradlew
+          ./gradlew --no-daemon --stacktrace apk \
+            -PnxApp=peanuts \
+            -PnxAppId=straybeta \
+            -PnxLabel="Peanuts Stray Beta" \
+            -PnxGames=010075101EF84000 \
+            -PnxVersion=0.1.6-stray-beta \
+            -PnxVersionCode=16061
+          test -s out/nxnative-android-peanuts.apk
+          mkdir -p ../../artifacts
+          cp out/nxnative-android-peanuts.apk ../../artifacts/Peanuts-Stray-Standard-Beta.apk
+          "$ANDROID_HOME/build-tools/36.0.0/apksigner" verify --verbose ../../artifacts/Peanuts-Stray-Standard-Beta.apk
+          "$ANDROID_HOME/build-tools/36.0.0/aapt" dump badging ../../artifacts/Peanuts-Stray-Standard-Beta.apk | head -n 2
+          sha256sum ../../artifacts/Peanuts-Stray-Standard-Beta.apk | tee ../../artifacts/SHA256SUMS.txt
+
+      - name: Upload APK
+        uses: actions/upload-artifact@v4
+        with:
+          name: Peanuts-Stray-Standard-Beta
+          path: |
+            peanuts/artifacts/Peanuts-Stray-Standard-Beta.apk
+            peanuts/artifacts/SHA256SUMS.txt
+          if-no-files-found: error
+          retention-days: 14
