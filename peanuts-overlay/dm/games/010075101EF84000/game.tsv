@@ -1,0 +1,24 @@
+# Stray (Annapurna Interactive / BlueTwelve Studio), Nintendo Switch.
+# Provisional identity profile from the user's own base-game dump metadata and ExeFS report.
+# This is NOT a gameplay-validated profile. Unreal shader archives still need device-side decoding/capture.
+
+title_id	010075101EF84000
+program_id	010075101EF84000
+
+name	Stray
+app_category	public.app-category.adventure
+
+# Base application CNMT version 0; build IDs below are the first 16 bytes of the NSO Build IDs.
+build	v0	Base	main=0dbe0a904fd985953f07063934ebe6a8	subsdk0=540b08ec046f39a50014ed6cd9117eb9	sdk=38873c89d24e5d11020e8d0aafe51cab
+package	v0
+shader_versions	v0
+
+# ExeFS report confirms these modules; rtld is the loader and is not listed as a game module.
+modules	main subsdk0 sdk
+romfs_marker	Hk_project/Content/Paks/Hk_project-Switch.pak
+zip_store	.pak:.mp4:.bik:.bk2
+
+# PEANUTS begin: provisional Stray profile identity only; no measured memory or graphics tuning.
+# Unreal Engine shader data is expected inside the game's PAK. Do not fabricate shader tables.
+# Device-side Unreal shader decoding/capture and shader_split output are still required before a playable pack exists.
+# PEANUTS end
