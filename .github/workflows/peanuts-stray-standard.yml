@@ -83,6 +83,11 @@ jobs:
       - name: Build the real on-device packer stage (Linux)
         shell: bash -el {0}
         run: |
+          # Micromamba's runtime-only dotnet package must not shadow the full SDK installed by setup-dotnet.
+          export DOTNET_ROOT=/usr/share/dotnet
+          export PATH="$DOTNET_ROOT:$PATH"
+          dotnet --list-sdks
+          dotnet --version
           zsh peanuts/peanuts/scripts/ondevice-stage.sh "$RUNNER_TEMP/peanuts-pack" all
           test -s "$RUNNER_TEMP/peanuts-pack/stage/lib/libpython3.14.so"
           test -s "$RUNNER_TEMP/peanuts-pack/stage/lib/libnxpack.so"
