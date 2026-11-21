@@ -18,7 +18,7 @@ concurrency:
 jobs:
   build:
     runs-on: ubuntu-24.04
-    timeout-minutes: 120
+    timeout-minutes: 240
     steps:
       - name: Checkout this repository (Stray profile overlay)
         uses: actions/checkout@v4
@@ -54,14 +54,23 @@ jobs:
       - name: Set up Android SDK
         uses: android-actions/setup-android@v4
 
-      - name: Install Android SDK, NDK and CMake
+      - name: Install Android SDK, NDK and Linux build tools
         run: |
+          sudo apt-get update
+          sudo apt-get install -y zsh ninja-build cmake build-essential
           yes | sdkmanager --licenses >/dev/null
           sdkmanager --install \
             "platforms;android-36" \
             "build-tools;36.0.0" \
             "ndk;28.2.13676358" \
             "cmake;3.22.1"
+          echo "ANDROID_NDK_HOME=$ANDROID_HOME/ndk/28.2.13676358" >> "$GITHUB_ENV"
+          test -d "$ANDROID_HOME/ndk/28.2.13676358/toolchains/llvm/prebuilt"
+
+      - name: Set up .NET 10 SDK for the native shader translator
+        uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: '10.0.114'
 
       - name: Set up Peanuts build environment
         uses: mamba-org/setup-micromamba@v2
@@ -70,6 +79,16 @@ jobs:
           environment-name: peanuts-build
           cache-environment: true
           init-shell: bash
+
+      - name: Build the real on-device packer stage (Linux)
+        shell: bash -el {0}
+        run: |
+          zsh peanuts/scripts/ondevice-stage.sh "$RUNNER_TEMP/peanuts-pack" all
+          test -s "$RUNNER_TEMP/peanuts-pack/stage/lib/libpython3.14.so"
+          test -s "$RUNNER_TEMP/peanuts-pack/stage/lib/libnxpack.so"
+          test -s "$RUNNER_TEMP/peanuts-pack/stage/lib/libdmsh_xlate.so"
+          test -s "$RUNNER_TEMP/peanuts-pack/stage/lib/libSPIRV-Tools-shared.so"
+          test -s "$RUNNER_TEMP/peanuts-pack/stage/python/lib/python3.14/os.py"
 
       - name: Build standard Peanuts APK with Stray profile
         shell: bash -el {0}
@@ -82,7 +101,8 @@ jobs:
             -PnxLabel="Peanuts Stray Beta" \
             -PnxGames=010075101EF84000 \
             -PnxVersion=0.1.6-stray-beta \
-            -PnxVersionCode=16061
+            -PnxVersionCode=16061 \
+            -PnxPackStage="$RUNNER_TEMP/peanuts-pack/stage"
           test -s out/nxnative-android-peanuts.apk
           mkdir -p ../../artifacts
           cp out/nxnative-android-peanuts.apk ../../artifacts/Peanuts-Stray-Standard-Beta.apk
