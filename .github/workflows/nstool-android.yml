@@ -80,18 +80,18 @@ jobs:
         run: |
           gradle --no-daemon --stacktrace assembleDebug
           mkdir -p ../artifacts
-          cp app/build/outputs/apk/debug/app-debug.apk ../artifacts/NSTool-Android-ARM64-Beta7.apk
-          "$ANDROID_HOME/build-tools/35.0.0/apksigner" verify --verbose ../artifacts/NSTool-Android-ARM64-Beta7.apk
-          "$ANDROID_HOME/build-tools/35.0.0/aapt" dump badging ../artifacts/NSTool-Android-ARM64-Beta7.apk
-          unzip -l ../artifacts/NSTool-Android-ARM64-Beta7.apk | grep -E 'lib/arm64-v8a/libc\+\+_shared.so|assets/nstool'
-          sha256sum ../artifacts/NSTool-Android-ARM64-Beta7.apk > ../artifacts/SHA256SUMS.txt
-          stat -c "APK size: %s bytes" ../artifacts/NSTool-Android-ARM64-Beta7.apk > ../artifacts/BUILD-INFO.txt
+          cp app/build/outputs/apk/debug/app-debug.apk ../artifacts/NSTool-Android-ARM64-Beta10.apk
+          "$ANDROID_HOME/build-tools/35.0.0/apksigner" verify --verbose ../artifacts/NSTool-Android-ARM64-Beta10.apk
+          "$ANDROID_HOME/build-tools/35.0.0/aapt" dump badging ../artifacts/NSTool-Android-ARM64-Beta10.apk
+          unzip -l ../artifacts/NSTool-Android-ARM64-Beta10.apk | grep -E 'lib/arm64-v8a/libc\+\+_shared.so|assets/nstool'
+          sha256sum ../artifacts/NSTool-Android-ARM64-Beta10.apk > ../artifacts/SHA256SUMS.txt
+          stat -c "APK size: %s bytes" ../artifacts/NSTool-Android-ARM64-Beta10.apk > ../artifacts/BUILD-INFO.txt
       - name: Upload APK
         uses: actions/upload-artifact@v4
         with:
-          name: NSTool-Android-ARM64-Beta7
+          name: NSTool-Android-ARM64-Beta10
           path: |
-            artifacts/NSTool-Android-ARM64-Beta7.apk
+            artifacts/NSTool-Android-ARM64-Beta10.apk
             artifacts/SHA256SUMS.txt
             artifacts/BUILD-INFO.txt
           retention-days: 7
