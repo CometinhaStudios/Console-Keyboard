@@ -2,6 +2,11 @@ name: Peanuts Native — Stray standard-source build
 
 on:
   workflow_dispatch:
+  push:
+    branches: [stray-peanuts-standard]
+    paths:
+      - '.github/workflows/peanuts-stray-standard.yml'
+      - 'peanuts-overlay/dm/games/010075101EF84000/**'
 
 permissions:
   contents: read
