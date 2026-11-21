@@ -1,0 +1,100 @@
+name: Peanuts Universal Diagnostic APK
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - ".github/workflows/peanuts-diagnostic.yml"
+      - "ci/patch_peanuts_diagnostic.py"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: peanuts-diagnostic-${{ github.ref }}
+  cancel-in-progress: false
+
+jobs:
+  build:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 90
+    steps:
+      - name: Checkout Actions runner repository
+        uses: actions/checkout@v4
+
+      - name: Checkout Peanuts Native 0.1.6 source
+        uses: actions/checkout@v4
+        with:
+          repository: igawa6/peanuts-native
+          ref: v0.1.6-1
+          path: peanuts
+          persist-credentials: false
+
+      - name: Set up JDK 21
+        uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: "21"
+          cache: gradle
+          cache-dependency-path: peanuts/android/app/gradle/wrapper/gradle-wrapper.properties
+
+      - name: Set up Android SDK
+        uses: android-actions/setup-android@v3
+
+      - name: Install Android SDK, NDK and CMake
+        run: |
+          yes | sdkmanager --licenses >/dev/null
+          sdkmanager --install \
+            "platforms;android-36" \
+            "build-tools;36.0.0" \
+            "ndk;28.2.13676358" \
+            "cmake;3.22.1"
+
+      - name: Set up Peanuts build environment
+        uses: mamba-org/setup-micromamba@v2
+        with:
+          environment-file: peanuts/android/environment.yml
+          environment-name: peanuts-build
+          cache-environment: true
+          init-shell: bash
+
+      - name: Patch unprofiled-game diagnostic import
+        shell: bash -el {0}
+        run: |
+          python --version
+          python -m py_compile ci/patch_peanuts_diagnostic.py
+          python ci/patch_peanuts_diagnostic.py peanuts
+
+      - name: Build diagnostic APK
+        shell: bash -el {0}
+        working-directory: peanuts/android/app
+        run: |
+          chmod +x ./gradlew
+          ./gradlew --no-daemon --stacktrace apk \
+            -PnxApp=peanuts \
+            -PnxAppId=diagstray \
+            -PnxLabel="Peanuts Universal Diagnostic Beta" \
+            -PnxGames=040074A01BF12000 \
+            -PnxGenericHost=true \
+            -PnxPackEngine=fake \
+            -PnxVersion=0.1.6-diagnostic \
+            -PnxVersionCode=16001
+          test -s out/nxnative-android-peanuts.apk
+          mkdir -p ../../artifacts
+          cp out/nxnative-android-peanuts.apk ../../artifacts/Peanuts-Universal-Diagnostic-Beta.apk
+          "$ANDROID_HOME/build-tools/36.0.0/apksigner" verify --verbose ../../artifacts/Peanuts-Universal-Diagnostic-Beta.apk
+          "$ANDROID_HOME/build-tools/36.0.0/aapt" dump badging ../../artifacts/Peanuts-Universal-Diagnostic-Beta.apk | head -n 2
+          sha256sum ../../artifacts/Peanuts-Universal-Diagnostic-Beta.apk | tee ../../artifacts/SHA256SUMS.txt
+          stat -c "APK size: %s bytes" ../../artifacts/Peanuts-Universal-Diagnostic-Beta.apk | tee ../../artifacts/BUILD-INFO.txt
+
+      - name: Upload installable APK
+        uses: actions/upload-artifact@v4
+        with:
+          name: Peanuts-Universal-Diagnostic-Beta
+          path: |
+            peanuts/artifacts/Peanuts-Universal-Diagnostic-Beta.apk
+            peanuts/artifacts/SHA256SUMS.txt
+            peanuts/artifacts/BUILD-INFO.txt
+          if-no-files-found: error
+          retention-days: 7
