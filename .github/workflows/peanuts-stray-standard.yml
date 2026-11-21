@@ -44,6 +44,9 @@ jobs:
           test -s peanuts/dm/games/010075101EF84000/game.tsv
           grep -q $'title_id\t010075101EF84000' peanuts/dm/games/010075101EF84000/game.tsv
 
+      - name: Patch Peanuts to accept NSTool single-version dumps as base version 0
+        run: python3 overlay/peanuts-overlay/patches/apply_single_version_dump.py peanuts
+
       - name: Set up JDK 21
         uses: actions/setup-java@v4
         with:
@@ -81,6 +84,11 @@ jobs:
           cache-environment: true
           init-shell: bash
 
+      - name: Test single-version dump support (Android JVM + Python packer)
+        shell: bash -el {0}
+        run: |
+          python peanuts/dm/tools/tests/test_android_gamelist.py
+
       - name: Build the real on-device packer stage (Linux)
         shell: bash -el {0}
         run: |
@@ -106,12 +114,12 @@ jobs:
             -PnxAppId=straybeta \
             -PnxLabel="Peanuts Stray Beta" \
             -PnxGames=010075101EF84000 \
-            -PnxVersion=0.1.6-stray-beta \
-            -PnxVersionCode=16061 \
+            -PnxVersion=0.1.6-stray-beta2 \
+            -PnxVersionCode=16062 \
             -PnxPackStage="$RUNNER_TEMP/peanuts-pack/stage"
           test -s out/nxnative-android-peanuts.apk
           mkdir -p ../../artifacts
-          cp out/nxnative-android-peanuts.apk ../../artifacts/Peanuts-Stray-Standard-Beta.apk
+          cp out/nxnative-android-peanuts.apk ../../artifacts/Peanuts-Stray-Standard-Beta2.apk
           "$ANDROID_HOME/build-tools/36.0.0/apksigner" verify --verbose ../../artifacts/Peanuts-Stray-Standard-Beta.apk
           "$ANDROID_HOME/build-tools/36.0.0/aapt" dump badging ../../artifacts/Peanuts-Stray-Standard-Beta.apk | head -n 2
           sha256sum ../../artifacts/Peanuts-Stray-Standard-Beta.apk | tee ../../artifacts/SHA256SUMS.txt
@@ -119,7 +127,7 @@ jobs:
       - name: Upload APK
         uses: actions/upload-artifact@v4
         with:
-          name: Peanuts-Stray-Standard-Beta
+          name: Peanuts-Stray-Standard-Beta2
           path: |
             peanuts/artifacts/Peanuts-Stray-Standard-Beta.apk
             peanuts/artifacts/SHA256SUMS.txt
