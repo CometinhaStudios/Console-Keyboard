@@ -24,7 +24,7 @@ public class MainActivity extends Activity {
   root.setOrientation(1);
   root.setPadding(24,24,24,24);
   TextView title=new TextView(this);
-  title.setText("NSTool Android • ARM64 Beta 7");
+  title.setText("NSTool Android • ARM64 Beta 10");
   title.setTextSize(23);
   root.addView(title);
   TextView note=new TextView(this);
@@ -39,8 +39,8 @@ public class MainActivity extends Activity {
   extractBtn=btn(root,"Extrair para pasta escolhida");
   tikBtn=btn(root,"5. Selecionar .tik (para abrir NCA)");
   onlyExe=new CheckBox(this);
-  onlyExe.setText("Só ExeFS (leve: main + main.npdm)");
-  onlyExe.setChecked(true);
+  onlyExe.setText("Só ExeFS (NÃO marque para o Peanuts: ele precisa do RomFS)");
+  onlyExe.setChecked(false);
   root.addView(onlyExe);
   ncaBtn=btn(root,"Extrair conteúdo do NCA (Program)");
 
@@ -90,7 +90,7 @@ public class MainActivity extends Activity {
   if(request==PICK_NSP){
    gameUri=u;
    gameFile=null;
-   status.setText("Arquivo NSP/NCA selecionado.");
+   status.setText("Arquivo NSP/NCA selecionado: "+describe(u));
   } else if(request==PICK_PROD_KEYS){
    prodKeysUri=u;
    status.setText("prod.keys selecionado. Será passado ao NSTool pela opção -k.");
@@ -99,13 +99,26 @@ public class MainActivity extends Activity {
    status.setText("title.keys selecionado. Será instalado em HOME/.switch/title.keys.");
   } else if(request==PICK_TIK){
    tikUri=u;
-   status.setText(".tik selecionado. A title key será decifrada com titlekek do prod.keys.");
+   status.setText(".tik selecionado: "+describe(u)+"\n(o .tik certo tem 704 bytes; o .cert tem ~1792)");
   } else if(request==PICK_DEST){
    destUri=u;
    int flags=data.getFlags()&(Intent.FLAG_GRANT_READ_URI_PERMISSION|Intent.FLAG_GRANT_WRITE_URI_PERMISSION);
    getContentResolver().takePersistableUriPermission(u,flags);
    status.setText("Pasta de destino selecionada.");
   }
+ }
+
+ String describe(Uri u){
+  String name="?";long size=-1;
+  try(android.database.Cursor c=getContentResolver().query(u,null,null,null,null)){
+   if(c!=null&&c.moveToFirst()){
+    int i=c.getColumnIndex(android.provider.OpenableColumns.DISPLAY_NAME);
+    int j=c.getColumnIndex(android.provider.OpenableColumns.SIZE);
+    if(i>=0)name=c.getString(i);
+    if(j>=0&&!c.isNull(j))size=c.getLong(j);
+   }
+  }catch(Exception e){}
+  return name+" ("+size+" bytes)";
  }
 
  File copy(Uri source,File target)throws Exception{
@@ -406,8 +419,8 @@ public class MainActivity extends Activity {
      File tik=copy(tikUri,new File(getFilesDir(),"selected.tik"));
      String[] r=readTicket(tik,prod);
      tkInfo=r[2];
-     for(int i=3;i<r.length;i++)titleKeyVariants.add(r[0]+"="+r[i]+"\n"); // chaves decifradas
-     titleKeyVariants.add(r[0]+"="+r[1]+"\n"); // chave como está no ticket
+     titleKeyVariants.add(r[0]+"="+r[1]+"\n"); // chave como está no ticket (FUNCIONOU no teste real com o Stray)
+     for(int i=3;i<r.length;i++)titleKeyVariants.add(r[0]+"="+r[i]+"\n"); // chaves decifradas (fallback)
     }else{
      titleKeyVariants.add(null); // usa o title.keys escolhido pelo usuário
     }
@@ -434,7 +447,7 @@ public class MainActivity extends Activity {
     for(int attempt=0;attempt<titleKeyVariants.size()&&!found;attempt++){
      String v=titleKeyVariants.get(attempt);
      if(v!=null)Files.write(titleKeys.toPath(),v.getBytes("UTF-8"));
-     append(log,"\n--- tentativa "+(attempt+1)+(attempt<titleKeyVariants.size()-1&&tikUri!=null?" (title key decifrada #"+(attempt+1)+")":" (title key do ticket)")+" ---\n");
+     append(log,"\n--- tentativa "+(attempt+1)+(attempt==0||tikUri==null?" (title key do ticket)":" (title key decifrada #"+attempt+")")+" ---\n");
      if(out.exists())deleteTree(out);
      out.mkdirs();
      final int at=attempt;
@@ -476,12 +489,25 @@ public class MainActivity extends Activity {
 
     if(found){
      runOnUiThread(()->status.setText("Copiando arquivos para a pasta escolhida..."));
-     if(exeOnly){
-      DocumentFile ef=folder.findFile("ExeFS");
-      if(ef==null)ef=folder.createDirectory("ExeFS");
-      copyTree(exeDir,ef);
-     }else{
-      copyTree(out,folder);
+     // Layout que o Peanuts Native espera: <pasta>/exefs e <pasta>/romfs
+     DocumentFile ef=folder.findFile("exefs");
+     if(ef==null)ef=folder.createDirectory("exefs");
+     if(ef==null)throw new IOException("Não foi possível criar exefs no destino.");
+     copyTree(exeDir,ef);
+     if(!exeOnly){
+      File romDir=null;
+      File[] sib=exeDir.getParentFile().listFiles();
+      if(sib!=null)for(File c:sib){
+       if(!c.isDirectory()||c.equals(exeDir))continue;
+       if(new File(c,"NintendoLogo.png").exists())continue; // partição do logo
+       romDir=c;break;
+      }
+      if(romDir==null)throw new IOException("ExeFS copiado, mas não achei o RomFS extraído (partição de dados).");
+      runOnUiThread(()->status.setText("Copiando RomFS (vários GB, pode demorar bastante)..."));
+      DocumentFile rf=folder.findFile("romfs");
+      if(rf==null)rf=folder.createDirectory("romfs");
+      if(rf==null)throw new IOException("Não foi possível criar romfs no destino.");
+      copyTree(romDir,rf);
      }
     }
     // sempre grava o log no destino para diagnóstico
