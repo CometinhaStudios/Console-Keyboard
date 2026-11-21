@@ -1,5 +1,6 @@
 # Stray (Annapurna Interactive / BlueTwelve Studio), Nintendo Switch.
-# Provisional identity profile from the user's own base-game dump metadata and ExeFS report.
+# Provisional profile from the user's own base-game dump metadata and ExeFS report.
+# Hk_project's public Unreal project metadata identifies EngineAssociation 4.27; Stray uses UE4.27.
 # This is NOT a gameplay-validated profile. Unreal shader archives still need device-side decoding/capture.
 
 title_id	010075101EF84000
@@ -18,7 +19,15 @@ modules	main subsdk0 sdk
 romfs_marker	Hk_project/Content/Paks/Hk_project-Switch.pak
 zip_store	.pak:.mp4:.bik:.bk2
 
-# PEANUTS begin: provisional Stray profile identity only; no measured memory or graphics tuning.
-# Unreal Engine shader data is expected inside the game's PAK. Do not fabricate shader tables.
+# PEANUTS begin: initial bring-up values, not measurements from a Stray device run.
+# Memory region values follow the existing Unreal Engine 4.27 profiles (e.g. DQ III / DQ VII); Stray still needs measurement.
+mem_reserve	0xF0000000
+mem_alias	0xC8000000
+mem_stack	0x10000000
+app_pool	0xCD500000
+# Unreal's common archive naming; exact shader archive contents/names have not yet been read from this PAK.
+shader_groups	ShaderArchive-Global-=global ShaderArchive-=game
+shader_note	Stray UE4.27 shaders (provisional grouping; unverified)
+# Shader data is expected inside the game's PAK. Do not fabricate shader tables.
 # Device-side Unreal shader decoding/capture and shader_split output are still required before a playable pack exists.
 # PEANUTS end
