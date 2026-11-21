@@ -45,7 +45,7 @@ jobs:
           test -s peanuts/dm/games/010075101EF84000/game.tsv
           grep -q $'title_id\t010075101EF84000' peanuts/dm/games/010075101EF84000/game.tsv
 
-      - name: Patch Peanuts to accept NSTool single-version dumps as base version 0
+      - name: Patch Peanuts for single-version dumps and explicit Android storage-access errors
         run: python3 overlay/peanuts-overlay/patches/apply_single_version_dump.py peanuts
 
       - name: Set up JDK 21
@@ -113,15 +113,15 @@ jobs:
           ./gradlew --no-daemon --stacktrace apk \
             -PnxApp=peanuts \
             -PnxAppId=straybeta \
-            -PnxLabel="Peanuts Stray Beta" \
+            -PnxLabel="Peanuts Stray Beta 3" \
             -PnxGames=010075101EF84000 \
-            -PnxVersion=0.1.6-stray-beta2 \
-            -PnxVersionCode=16062 \
+            -PnxVersion=0.1.6-stray-beta3 \
+            -PnxVersionCode=16063 \
             -PnxPackStage="$RUNNER_TEMP/peanuts-pack/stage"
           test -s out/nxnative-android-peanuts.apk
           mkdir -p ../../artifacts
-          cp out/nxnative-android-peanuts.apk ../../artifacts/Peanuts-Stray-Standard-Beta2.apk
-          "$ANDROID_HOME/build-tools/36.0.0/apksigner" verify --verbose ../../artifacts/Peanuts-Stray-Standard-Beta2.apk
+          cp out/nxnative-android-peanuts.apk ../../artifacts/Peanuts-Stray-Standard-Beta3.apk
+          "$ANDROID_HOME/build-tools/36.0.0/apksigner" verify --verbose ../../artifacts/Peanuts-Stray-Standard-Beta3.apk
           "$ANDROID_HOME/build-tools/36.0.0/aapt" dump badging ../../artifacts/Peanuts-Stray-Standard-Beta2.apk | head -n 2
           sha256sum ../../artifacts/Peanuts-Stray-Standard-Beta2.apk | tee ../../artifacts/SHA256SUMS.txt
 
