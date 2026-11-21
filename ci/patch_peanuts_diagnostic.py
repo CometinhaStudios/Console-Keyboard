@@ -187,8 +187,8 @@ patch(
 
 patch(
     "android/app/src/main/java/dev/peanuts/ui/GameSheet.java",
-    "        s.titleId = title.titleId; s.name = title.name;\n",
-    "        s.titleId = title.titleId; s.name = title.name;\n        s.importOnly = title.status == LibraryScanner.Status.NO_PROFILE;\n",
+    "    State state() {\n        State s = new State();\n        s.titleId = title.titleId; s.name = title.name;\n",
+    "    State state() {\n        State s = new State();\n        s.titleId = title.titleId; s.name = title.name;\n        s.importOnly = title.status == LibraryScanner.Status.NO_PROFILE;\n",
     "set state import-only",
 )
 
