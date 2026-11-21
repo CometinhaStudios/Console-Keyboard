@@ -1,0 +1,83 @@
+name: Build NSTool Android APK
+on:
+  push:
+    branches: [main]
+    paths:
+      - "nstool-android/**"
+      - ".github/workflows/nstool-android.yml"
+  workflow_dispatch:
+permissions:
+  contents: read
+concurrency:
+  group: nstool-android-${{ github.ref }}
+  cancel-in-progress: true
+jobs:
+  build:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 90
+    steps:
+      - name: Checkout app
+        uses: actions/checkout@v4
+      - name: Checkout NSTool source and dependencies
+        uses: actions/checkout@v4
+        with:
+          repository: jakcron/nstool
+          ref: master
+          path: upstream/nstool
+          submodules: recursive
+          persist-credentials: false
+      - name: Set up Java
+        uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: "17"
+          cache: gradle
+      - name: Set up Android SDK and NDK
+        uses: android-actions/setup-android@v4
+      - name: Install Android build tools
+        run: |
+          yes | sdkmanager --licenses >/dev/null
+          sdkmanager --install "platforms;android-35" "build-tools;35.0.0" "ndk;28.2.13676358"
+      - name: Compile NSTool for Android arm64
+        shell: bash
+        run: |
+          set -euxo pipefail
+          NDK="$ANDROID_HOME/ndk/28.2.13676358"
+          TOOL="$NDK/toolchains/llvm/prebuilt/linux-x86_64/bin"
+          export PATH="$TOOL:$PATH"
+          export CC=aarch64-linux-android26-clang
+          export CXX=aarch64-linux-android26-clang++
+          export PROJECT_PLATFORM=GNU
+          export PROJECT_PLATFORM_ARCH=aarch64
+          mkdir -p "$RUNNER_TEMP/llvm-ar-bin"
+          ln -sf "$TOOL/llvm-ar" "$RUNNER_TEMP/llvm-ar-bin/ar"
+          export PATH="$RUNNER_TEMP/llvm-ar-bin:$PATH"
+          make -C upstream/nstool/deps/libmbedtls static_lib
+          make -C upstream/nstool/deps/libfmt static_lib
+          make -C upstream/nstool/deps/libtoolchain static_lib
+          make -C upstream/nstool/deps/liblz4 static_lib
+          make -C upstream/nstool/deps/libpietendo static_lib
+          make -C upstream/nstool
+          test -x upstream/nstool/bin/nstool
+          mkdir -p nstool-android/app/src/main/native-assets
+          cp upstream/nstool/bin/nstool nstool-android/app/src/main/native-assets/nstool
+          file nstool-android/app/src/main/native-assets/nstool
+      - name: Build APK
+        working-directory: nstool-android
+        run: |
+          gradle --no-daemon --stacktrace assembleDebug
+          mkdir -p ../artifacts
+          cp app/build/outputs/apk/debug/app-debug.apk ../artifacts/NSTool-Android-ARM64-Beta.apk
+          "$ANDROID_HOME/build-tools/35.0.0/apksigner" verify --verbose ../artifacts/NSTool-Android-ARM64-Beta.apk
+          sha256sum ../artifacts/NSTool-Android-ARM64-Beta.apk > ../artifacts/SHA256SUMS.txt
+          stat -c "APK size: %s bytes" ../artifacts/NSTool-Android-ARM64-Beta.apk > ../artifacts/BUILD-INFO.txt
+      - name: Upload APK
+        uses: actions/upload-artifact@v4
+        with:
+          name: NSTool-Android-ARM64-Beta
+          path: |
+            artifacts/NSTool-Android-ARM64-Beta.apk
+            artifacts/SHA256SUMS.txt
+            artifacts/BUILD-INFO.txt
+          retention-days: 7
+          if-no-files-found: error
