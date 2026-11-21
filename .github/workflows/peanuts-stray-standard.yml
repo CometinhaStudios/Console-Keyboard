@@ -7,6 +7,7 @@ on:
     paths:
       - '.github/workflows/peanuts-stray-standard.yml'
       - 'peanuts-overlay/dm/games/010075101EF84000/**'
+      - 'peanuts-overlay/patches/**'
 
 permissions:
   contents: read
@@ -120,16 +121,16 @@ jobs:
           test -s out/nxnative-android-peanuts.apk
           mkdir -p ../../artifacts
           cp out/nxnative-android-peanuts.apk ../../artifacts/Peanuts-Stray-Standard-Beta2.apk
-          "$ANDROID_HOME/build-tools/36.0.0/apksigner" verify --verbose ../../artifacts/Peanuts-Stray-Standard-Beta.apk
-          "$ANDROID_HOME/build-tools/36.0.0/aapt" dump badging ../../artifacts/Peanuts-Stray-Standard-Beta.apk | head -n 2
-          sha256sum ../../artifacts/Peanuts-Stray-Standard-Beta.apk | tee ../../artifacts/SHA256SUMS.txt
+          "$ANDROID_HOME/build-tools/36.0.0/apksigner" verify --verbose ../../artifacts/Peanuts-Stray-Standard-Beta2.apk
+          "$ANDROID_HOME/build-tools/36.0.0/aapt" dump badging ../../artifacts/Peanuts-Stray-Standard-Beta2.apk | head -n 2
+          sha256sum ../../artifacts/Peanuts-Stray-Standard-Beta2.apk | tee ../../artifacts/SHA256SUMS.txt
 
       - name: Upload APK
         uses: actions/upload-artifact@v4
         with:
           name: Peanuts-Stray-Standard-Beta2
           path: |
-            peanuts/artifacts/Peanuts-Stray-Standard-Beta.apk
+            peanuts/artifacts/Peanuts-Stray-Standard-Beta2.apk
             peanuts/artifacts/SHA256SUMS.txt
           if-no-files-found: error
           retention-days: 14
