@@ -44,6 +44,7 @@ jobs:
           set -euxo pipefail
           NDK="$ANDROID_HOME/ndk/28.2.13676358"
           TOOL="$NDK/toolchains/llvm/prebuilt/linux-x86_64/bin"
+          SYSROOT="$NDK/toolchains/llvm/prebuilt/linux-x86_64/sysroot"
           export PATH="$TOOL:$PATH"
           export CC=aarch64-linux-android26-clang
           export CXX=aarch64-linux-android26-clang++
@@ -59,24 +60,38 @@ jobs:
           make -C upstream/nstool/deps/libpietendo static_lib
           make -C upstream/nstool
           test -x upstream/nstool/bin/nstool
+
+          # NSTool links against the NDK's shared C++ runtime. Bundle the
+          # matching ARM64 runtime as an Android native library so bionic can
+          # resolve it when MainActivity starts the CLI process.
+          RUNTIME="$SYSROOT/usr/lib/aarch64-linux-android/libc++_shared.so"
+          test -f "$RUNTIME"
+          mkdir -p nstool-android/app/src/main/jniLibs/arm64-v8a
+          cp "$RUNTIME" nstool-android/app/src/main/jniLibs/arm64-v8a/libc++_shared.so
+          "$TOOL/llvm-readelf" -d upstream/nstool/bin/nstool | tee "$RUNNER_TEMP/nstool-dynamic.txt"
+          grep -q 'libc++_shared.so' "$RUNNER_TEMP/nstool-dynamic.txt"
+
           mkdir -p nstool-android/app/src/main/native-assets
           cp upstream/nstool/bin/nstool nstool-android/app/src/main/native-assets/nstool
           file nstool-android/app/src/main/native-assets/nstool
+          file nstool-android/app/src/main/jniLibs/arm64-v8a/libc++_shared.so
       - name: Build APK
         working-directory: nstool-android
         run: |
           gradle --no-daemon --stacktrace assembleDebug
           mkdir -p ../artifacts
-          cp app/build/outputs/apk/debug/app-debug.apk ../artifacts/NSTool-Android-ARM64-Beta.apk
-          "$ANDROID_HOME/build-tools/35.0.0/apksigner" verify --verbose ../artifacts/NSTool-Android-ARM64-Beta.apk
-          sha256sum ../artifacts/NSTool-Android-ARM64-Beta.apk > ../artifacts/SHA256SUMS.txt
-          stat -c "APK size: %s bytes" ../artifacts/NSTool-Android-ARM64-Beta.apk > ../artifacts/BUILD-INFO.txt
+          cp app/build/outputs/apk/debug/app-debug.apk ../artifacts/NSTool-Android-ARM64-Beta3.apk
+          "$ANDROID_HOME/build-tools/35.0.0/apksigner" verify --verbose ../artifacts/NSTool-Android-ARM64-Beta3.apk
+          "$ANDROID_HOME/build-tools/35.0.0/aapt" dump badging ../artifacts/NSTool-Android-ARM64-Beta3.apk
+          unzip -l ../artifacts/NSTool-Android-ARM64-Beta3.apk | grep -E 'lib/arm64-v8a/libc\+\+_shared.so|assets/nstool'
+          sha256sum ../artifacts/NSTool-Android-ARM64-Beta3.apk > ../artifacts/SHA256SUMS.txt
+          stat -c "APK size: %s bytes" ../artifacts/NSTool-Android-ARM64-Beta3.apk > ../artifacts/BUILD-INFO.txt
       - name: Upload APK
         uses: actions/upload-artifact@v4
         with:
-          name: NSTool-Android-ARM64-Beta
+          name: NSTool-Android-ARM64-Beta3
           path: |
-            artifacts/NSTool-Android-ARM64-Beta.apk
+            artifacts/NSTool-Android-ARM64-Beta3.apk
             artifacts/SHA256SUMS.txt
             artifacts/BUILD-INFO.txt
           retention-days: 7
