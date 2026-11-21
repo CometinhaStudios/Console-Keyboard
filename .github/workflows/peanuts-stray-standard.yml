@@ -12,8 +12,9 @@ permissions:
   contents: read
 
 concurrency:
-  group: peanuts-stray-standard-${{ github.ref }}
-  cancel-in-progress: true
+  # Keep each revision's verification independent; a queued old build must not block the corrected APK build.
+  group: peanuts-stray-standard-${{ github.run_id }}
+  cancel-in-progress: false
 
 jobs:
   build:
