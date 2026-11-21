@@ -132,7 +132,7 @@ print("added stepDiagnostic()")
 patch(
     "android/app/src/main/java/dev/peanuts/build/BuildService.java",
     '.setContentTitle(ok ? name + " is ready to play" : "Building " + name + " stopped")',
-    '.setContentTitle(ok ? (message.contains("imported for analysis") ? name + " imported for analysis" : name + " is ready to play") : "Building " + name + " stopped")',
+    '.setContentTitle(ok ? (message.contains("analysis complete") ? name + " analysis complete" : name + " is ready to play") : "Building " + name + " stopped")',
     "notification title",
 )
 
