@@ -43,31 +43,91 @@ patch(
     "service request value",
 )
 
-# A diagnostic import ends after the .nup is complete. It never enters Prepare, shader capture,
-# companion installation, or the game launch path.
+# A diagnostic scan probes the NSP/XCI metadata in place. It does not write a .nup or
+# copy game contents; the existing shareable build log carries the compact report.
 service = ROOT / "android/app/src/main/java/dev/peanuts/build/BuildService.java"
 src = service.read_text(encoding="utf-8")
-start = '            File dump = stepImport(r);\n'
-end = '            progress("done", 100, message);\n'
-if src.count(start) != 1:
-    raise SystemExit("BuildService.java: import start marker not unique")
+src = src.replace('            File dump = stepImport(r);\\n',
+                  '            File dump = r.importOnly ? stepDiagnostic(r) : stepImport(r);\\n', 1)
+if src.count('r.importOnly ? stepDiagnostic(r) : stepImport(r);') != 1:
+    raise SystemExit("BuildService.java: diagnostic scan dispatch was not inserted")
+start = '            File dump = r.importOnly ? stepDiagnostic(r) : stepImport(r);\\n'
+end = '            progress("done", 100, message);\\n'
 i = src.index(start)
 j = src.index(end, i) + len(end)
 old_block = src[i + len(start):j]
 new_block = (
     start
-    + '            if (r.importOnly) {\n'
-    + '                ok = true;\n'
-    + '                message = name + " imported for analysis. Saved file: " + dump.getAbsolutePath()\n'
-    + '                        + ". No game preparation or launch was attempted because this app has no profile for this title.";\n'
-    + '                log("diagnostic import only; output: " + dump.getAbsolutePath());\n'
-    + '                progress("done", 100, message);\n'
-    + '            } else {\n'
+    + '            if (r.importOnly) {\\n'
+    + '                ok = true;\\n'
+    + '                message = name + " analysis complete. A compact metadata report was added to Share diagnostic report. No .nup or game copy was created.";\\n'
+    + '                log("diagnostic scan complete; no .nup was created and no game payload was copied");\\n'
+    + '                progress("done", 100, message);\\n'
+    + '            } else {\\n'
     + old_block
-    + '            }\n'
+    + '            }\\n'
 )
-service.write_text(src[:i] + new_block + src[j:], encoding="utf-8")
-print("patched BuildService.java import-only branch")
+src = src[:i] + new_block + src[j:]
+service.write_text(src, encoding="utf-8")
+print("patched BuildService.java diagnostic scan branch")
+
+# Add a metadata-only scanner using the importer's existing native probe. This reads the selected
+# NSP/XCI in place and logs CNMT/NACP-derived title data; it never calls writeNup.
+needle = '    /** (a) the .nup from an NSP/XCI, or the base as it is */\\n'
+method = r'''
+    /** Read title metadata from the owner's NSP/XCI in place; never create or copy a .nup. */
+    private File stepDiagnostic(BuildRequest r) throws IOException {
+        if (r.base == null || !r.base.isFile()) throw new IOException("The game's base NSP/XCI is missing.");
+        if (!Importer.available()) throw new IOException("This build has no native NSP metadata reader.");
+        File keys = new File(new File(getFilesDir(), "keys"), "prod.keys");
+        if (!keys.isFile()) throw new IOException("No prod.keys: add your own keys in Setup first.");
+        progress("import", 0, "Loading your keys for metadata scan");
+        try {
+            if (Importer.keys(keys) != 0) throw new IOException("Keys: " + Importer.lastError());
+            List<File> inputs = r.inputs();
+            int found = 0;
+            for (File input : inputs) {
+                if (input == null || !input.isFile()) continue;
+                log("diagnostic-file: " + input.getName() + " (" + BuildLogBundle.size(input.length()) + ")");
+                String json = Importer.probe(input);
+                if (json == null || json.trim().isEmpty()) {
+                    log("diagnostic-warning: no title metadata returned for " + input.getName());
+                    continue;
+                }
+                org.json.JSONArray titles = new org.json.JSONArray(json);
+                log("diagnostic-container-titles: " + input.getName() + " -> " + titles.length());
+                for (int i = 0; i < titles.length(); i++) {
+                    org.json.JSONObject o = titles.getJSONObject(i);
+                    found++;
+                    log("diagnostic-title: title_id=" + o.optString("title_id")
+                            + ", app_id=" + o.optString("app_id")
+                            + ", kind=" + o.optInt("kind")
+                            + ", version=" + o.optLong("version")
+                            + ", name=" + o.optString("name")
+                            + ", publisher=" + o.optString("publisher")
+                            + ", content_bytes=" + o.optLong("size")
+                            + ", unpack_bytes=" + o.optLong("unpack")
+                            + ", check_bytes=" + o.optLong("check"));
+                }
+            }
+            if (found == 0) throw new IOException("The NSP was opened, but no CNMT title metadata was found. Check the file and keys.");
+            log("diagnostic-summary: " + found + " title record(s); scan-only mode; no NUP generated.");
+            progress("import", IMPORT_END, "Metadata scan complete (" + found + " title records)");
+            return r.base;
+        } catch (ReflectiveOperationException e) {
+            throw new IOException("The metadata reader does not match this app build: " + e.getMessage());
+        } catch (org.json.JSONException e) {
+            throw new IOException("The metadata reader returned invalid title data: " + e.getMessage());
+        }
+    }
+
+'''
+if src.count(needle) != 1:
+    raise SystemExit("BuildService.java: stepImport insertion point not unique")
+src = src.replace(needle, method + needle, 1)
+service.write_text(src, encoding="utf-8")
+print("added stepDiagnostic()")
+
 
 patch(
     "android/app/src/main/java/dev/peanuts/build/BuildService.java",
@@ -115,7 +175,7 @@ diagnostic_method = r'''
         boolean baseGone = b != null && !b.file.exists();
         PUi.add(box, PUi.warnChip(a, "No game profile", "No game profile", missing), 0);
         PUi.add(box, PUi.body(a,
-                "Diagnostic import only. This makes a .nup from your own game files and records the import log. It does not prepare shaders, install a game profile, or attempt to launch the game."), 10);
+                "Diagnostic import only. Reads the NSP/XCI metadata in place and records a compact report. It does not create a .nup, copy game contents, prepare shaders, or launch the game."), 10);
         PUi.add(box, PUi.body(a, "Title ID: " + title.titleId), 4);
         CharSequence baseLine = b == null ? "None found"
                 : b.file.getName() + (b.version > 0 ? " · " + versionText(b.version) : "")
@@ -142,7 +202,7 @@ diagnostic_method = r'''
             PUi.add(box, PUi.warnChip(a, "Keys needed", "Keys needed", "Add your own prod.keys in Settings › Library to import an encrypted NSP."), 12);
             PUi.add(box, PUi.button(a, "Add keys…", PUi.Kind.SOFT, Haptics.on(Haptics.Word.TICK, v -> LibrarySettings.pickKeys(a))), 4, PUi.wrap());
         }
-        if (building) PUi.add(box, PUi.small(a, "Importing now. Progress is shown on the game's card."), 12);
+        if (building) PUi.add(box, PUi.small(a, "Analyzing now. Progress is shown on the game's card."), 12);
         String chosenFolder = PeanutsPrefs.chosenBuildDir(a, title.titleId);
         String defaultFolder = PeanutsPrefs.buildDir(a);
         PUi.Setting destination = new PUi.Setting(a, "🗂️", "Import destination",
@@ -154,7 +214,7 @@ diagnostic_method = r'''
         renderSpaceLine();
 
         boolean hasDestination = title.home != null || chosenFolder != null || defaultFolder != null;
-        PUi.Action importAction = PUi.action(a, R.drawable.ic_build, "Import for analysis", PUi.Kind.PRIMARY,
+        PUi.Action importAction = PUi.action(a, R.drawable.ic_build, "Analyze NSP (small report)", PUi.Kind.PRIMARY,
                 Haptics.on(Haptics.Word.CLICK, v -> startDiagnosticImport()));
         importAction.setEnabled(!building && b != null && !baseGone && !needKeys && hasDestination);
         PUi.add(box, importAction, 12, PUi.fill());
