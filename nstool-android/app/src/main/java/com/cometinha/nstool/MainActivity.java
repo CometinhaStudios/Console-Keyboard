@@ -24,7 +24,7 @@ public class MainActivity extends Activity {
   root.setOrientation(1);
   root.setPadding(24,24,24,24);
   TextView title=new TextView(this);
-  title.setText("NSTool Android • ARM64 Beta 6");
+  title.setText("NSTool Android • ARM64 Beta 7");
   title.setTextSize(23);
   root.addView(title);
   TextView note=new TextView(this);
@@ -253,7 +253,7 @@ public class MainActivity extends Activity {
  }
 
 
- // ===== Beta 6: extração do conteúdo de um NCA =====
+ // ===== Beta 5: extração do conteúdo de um NCA =====
  static byte[] hex(String h){
   int n=h.length()/2;byte[] r=new byte[n];
   for(int i=0;i<n;i++)r[i]=(byte)Integer.parseInt(h.substring(2*i,2*i+2),16);
@@ -277,40 +277,58 @@ public class MainActivity extends Activity {
   return m;
  }
 
- // Lê o .tik e devolve {rightsId, tituloKeyCifrada, tituloKeyDecifrada, relatório}
+ // Lê o .tik: acha o RightsID varrendo o arquivo (não depende do tipo de assinatura).
+ // Retorna {rightsId, titleKeyCifrada, relatório, titleKeyDecifrada1, titleKeyDecifrada2, ...}
  String[] readTicket(File tik,File prod)throws Exception{
   byte[] t=new byte[(int)tik.length()];
   try(FileInputStream in=new FileInputStream(tik)){
    int o=0,n;
    while(o<t.length&&(n=in.read(t,o,t.length-o))>0)o+=n;
   }
-  if(t.length<0x2C0-0x140)throw new IOException(".tik pequeno demais ("+t.length+" bytes).");
-  // O tipo de assinatura do .tik é big-endian (ex.: 00 01 00 04 = 0x010004).
-  long sig=((t[0]&0xffL)<<24)|((t[1]&0xffL)<<16)|((t[2]&0xffL)<<8)|(t[3]&0xffL);
-  int d=-1;
-  if(sig==0x010000||sig==0x010003)d=4+0x200+0x3C;
-  else if(sig==0x010001||sig==0x010004)d=4+0x100+0x3C;
-  else if(sig==0x010002||sig==0x010005)d=4+0x3C+0x40;
-  // Os dados do ticket têm 0x180 bytes; se o tamanho do arquivo não bater com o tipo, confia no tamanho.
-  int byLen=t.length-0x180;
-  if(d<0||d+0x180>t.length||(byLen>=0x80&&byLen!=d&&t.length<=0x2C0)){
-   if(byLen<0x80)throw new IOException("Tipo de assinatura de ticket desconhecido: 0x"+Long.toHexString(sig)+" e tamanho "+t.length+" inesperado.");
-   d=byLen;
+  StringBuilder info=new StringBuilder();
+  info.append("tik: ").append(t.length).append(" bytes, cabeçalho ").append(hexs(t,0,4)).append("\n");
+  // RightsID = TitleID (8 bytes, não nulo) + 7 bytes zero + 1 byte de geração (1..0x30)
+  int ro=-1;
+  for(int o=0x100;o+16<=t.length&&ro<0;o++){
+   boolean nz=false;
+   for(int i=0;i<8;i++)if(t[o+i]!=0){nz=true;break;}
+   if(!nz)continue;
+   boolean z=true;
+   for(int i=8;i<15;i++)if(t[o+i]!=0){z=false;break;}
+   int g=t[o+15]&0xff;
+   if(z&&g>=1&&g<=0x30)ro=o;
   }
-  if(t.length<d+0x170)throw new IOException(".tik truncado.");
-  int keyType=t[d+0x141]&0xff;
-  int rev=t[d+0x145]&0xff;
-  String rightsId=hexs(t,d+0x160,16);
-  String enc=hexs(t,d+0x40,16);
-  if(keyType!=0)throw new IOException("Ticket personalizado (RSA, tipo "+keyType+"): a title key não pode ser decifrada aqui. Precisa de ticket comum.");
+  if(ro<0)throw new IOException("Não achei o RightsID dentro do .tik ("+t.length+" bytes). Header: "+hexs(t,0,16));
+  int d=ro-0x160;
+  if(d<0x40)throw new IOException("Layout do .tik inesperado (RightsID no offset "+ro+").");
+  String rightsId=hexs(t,ro,16);
+  int gen=t[ro+15]&0xff;
+  int kb=d+0x40;
+  boolean tailZero=true;
+  for(int i=16;i<0x100&&kb+i<t.length;i++)if(t[kb+i]!=0){tailZero=false;break;}
+  info.append("RightsID=").append(rightsId).append(" (offset 0x").append(Integer.toHexString(ro)).append(")\n");
+  info.append("byte do ticket em d+0x145=").append(t[d+0x145]&0xff).append(", tipo d+0x141=").append(t[d+0x141]&0xff).append(", resto do bloco zerado=").append(tailZero).append("\n");
+  if(!tailZero)throw new IOException("Title key parece personalizada (RSA): bloco de chave não é AES comum.\n"+info);
+  String enc=hexs(t,kb,16);
   java.util.HashMap<String,String> keys=parseKeys(prod);
-  String name=String.format("titlekek_%02x",rev);
-  String kek=keys.get(name);
-  if(kek==null)throw new IOException("O prod.keys não tem "+name+". Esse jogo exige master key revisão "+rev+" (geração "+(rev+1)+"). Gere um prod.keys do firmware mais novo.");
-  javax.crypto.Cipher c=javax.crypto.Cipher.getInstance("AES/ECB/NoPadding");
-  c.init(javax.crypto.Cipher.DECRYPT_MODE,new javax.crypto.spec.SecretKeySpec(hex(kek),"AES"));
-  byte[] dec=c.doFinal(hex(enc));
-  return new String[]{rightsId,enc,hexs(dec,0,16),"RightsID="+rightsId+" • master_key_rev="+rev+" ("+name+" encontrado)"};
+  java.util.LinkedHashSet<Integer> revs=new java.util.LinkedHashSet<>();
+  revs.add(Math.max(gen-1,0));       // geração 18 -> titlekek_11
+  revs.add(gen);                      // caso o byte já seja o índice
+  revs.add(t[d+0x145]&0xff);          // campo do ticket
+  java.util.ArrayList<String> out=new java.util.ArrayList<>();
+  out.add(rightsId);out.add(enc);out.add("");
+  for(int rev:revs){
+   String name=String.format("titlekek_%02x",rev);
+   String kek=keys.get(name);
+   if(kek==null){info.append(name).append(": ausente no prod.keys\n");continue;}
+   javax.crypto.Cipher c=javax.crypto.Cipher.getInstance("AES/ECB/NoPadding");
+   c.init(javax.crypto.Cipher.DECRYPT_MODE,new javax.crypto.spec.SecretKeySpec(hex(kek),"AES"));
+   out.add(hexs(c.doFinal(hex(enc)),0,16));
+   info.append(name).append(": ok\n");
+  }
+  if(out.size()<=3)throw new IOException("Nenhum titlekek compatível no prod.keys.\n"+info);
+  out.set(2,info.toString());
+  return out.toArray(new String[0]);
  }
 
  int exec(java.util.List<String> args,File home,File log)throws Exception{
@@ -387,14 +405,14 @@ public class MainActivity extends Activity {
     if(tikUri!=null){
      File tik=copy(tikUri,new File(getFilesDir(),"selected.tik"));
      String[] r=readTicket(tik,prod);
-     tkInfo=r[3];
-     titleKeyVariants.add(r[0]+"="+r[2]+"\n"); // chave decifrada
+     tkInfo=r[2];
+     for(int i=3;i<r.length;i++)titleKeyVariants.add(r[0]+"="+r[i]+"\n"); // chaves decifradas
      titleKeyVariants.add(r[0]+"="+r[1]+"\n"); // chave como está no ticket
     }else{
      titleKeyVariants.add(null); // usa o title.keys escolhido pelo usuário
     }
     final String tkInfoF=tkInfo;
-    append(log,"=== Beta 6 / extração de NCA ===\n"+tkInfo+"\n");
+    append(log,"=== Beta 5 / extração de NCA ===\n"+tkInfo+"\n");
 
     // detecta as opções do NSTool
     File helpLog=new File(work,"help.log");
@@ -416,7 +434,7 @@ public class MainActivity extends Activity {
     for(int attempt=0;attempt<titleKeyVariants.size()&&!found;attempt++){
      String v=titleKeyVariants.get(attempt);
      if(v!=null)Files.write(titleKeys.toPath(),v.getBytes("UTF-8"));
-     append(log,"\n--- tentativa "+(attempt+1)+(attempt==0?" (title key decifrada)":" (title key do ticket)")+" ---\n");
+     append(log,"\n--- tentativa "+(attempt+1)+(attempt<titleKeyVariants.size()-1&&tikUri!=null?" (title key decifrada #"+(attempt+1)+")":" (title key do ticket)")+" ---\n");
      if(out.exists())deleteTree(out);
      out.mkdirs();
      final int at=attempt;
@@ -480,14 +498,16 @@ public class MainActivity extends Activity {
     ui(ok?"SUCESSO: ExeFS encontrado (main + main.npdm). Arquivos em NSTool-NCA/ na pasta escolhida.\n"+tkInfoF
         :"FALHOU: main.npdm não apareceu. Chave errada, prod.keys incompleto ou NCA incorreto. Veja o log abaixo (também salvo em NSTool-NCA/nstool-nca.log).\n"+tkInfoF,msg,true);
    }catch(Exception e){
-    String m=read(log);
-    ui("Falha: "+e.getMessage(),m,true);
+    StringBuilder m=new StringBuilder(read(log));
+    m.append("\n").append(e.toString());
+    ui("Falha: "+e.getMessage(),m.toString(),true);
    }
   });
  }
 
  String read(File f){
   try{
+   if(!f.exists())return "";
    byte[] buffer=new byte[(int)Math.min(f.length(),2000000)];
    try(FileInputStream in=new FileInputStream(f)){in.read(buffer);}
    return new String(buffer);
