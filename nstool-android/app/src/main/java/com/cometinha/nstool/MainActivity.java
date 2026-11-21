@@ -44,6 +44,11 @@ public class MainActivity extends Activity {
    else{args.add("-v");args.add("--showlayout");args.add("--fstree");}
    args.add(gameFile.getAbsolutePath());
    ProcessBuilder pb=new ProcessBuilder(args);
+   // The NSTool CLI is launched as a child process, so tell bionic where
+   // Gradle/PackageManager extracted libc++_shared.so for this app.
+   String nativeLibDir=getApplicationInfo().nativeLibraryDir;
+   String inheritedLibPath=pb.environment().get("LD_LIBRARY_PATH");
+   pb.environment().put("LD_LIBRARY_PATH",nativeLibDir+(inheritedLibPath==null||inheritedLibPath.isEmpty()?"":":"+inheritedLibPath));
    pb.redirectErrorStream(true);pb.redirectOutput(log);int code=pb.start().waitFor();
    if(extract&&code==0){DocumentFile root=DocumentFile.fromTreeUri(this,destUri);DocumentFile folder=root.createDirectory("NSTool-Extracted");if(folder==null)folder=root;copyTree(new File(work,"contents"),folder);}
    String msg=read(log);runOnUiThread(()->{status.setText("Código NSTool: "+code+(extract&&code==0?" • extração copiada para a pasta escolhida":""));output.setText(msg);scanBtn.setEnabled(true);extractBtn.setEnabled(true);});
