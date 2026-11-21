@@ -22,7 +22,7 @@ jobs:
         uses: actions/checkout@v4
         with:
           repository: jakcron/nstool
-          ref: master
+          ref: development-tip
           path: upstream/nstool
           submodules: recursive
           persist-credentials: false
