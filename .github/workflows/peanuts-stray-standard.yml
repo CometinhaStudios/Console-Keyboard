@@ -124,15 +124,15 @@ jobs:
           mkdir -p ../../artifacts
           cp out/nxnative-android-peanuts.apk ../../artifacts/Peanuts-Stray-Standard-Beta3.apk
           "$ANDROID_HOME/build-tools/36.0.0/apksigner" verify --verbose ../../artifacts/Peanuts-Stray-Standard-Beta3.apk
-          "$ANDROID_HOME/build-tools/36.0.0/aapt" dump badging ../../artifacts/Peanuts-Stray-Standard-Beta2.apk | head -n 2
-          sha256sum ../../artifacts/Peanuts-Stray-Standard-Beta2.apk | tee ../../artifacts/SHA256SUMS.txt
+          "$ANDROID_HOME/build-tools/36.0.0/aapt" dump badging ../../artifacts/Peanuts-Stray-Standard-Beta3.apk | head -n 2
+          sha256sum ../../artifacts/Peanuts-Stray-Standard-Beta3.apk | tee ../../artifacts/SHA256SUMS.txt
 
       - name: Upload APK
         uses: actions/upload-artifact@v4
         with:
-          name: Peanuts-Stray-Standard-Beta2
+          name: Peanuts-Stray-Standard-Beta3
           path: |
-            peanuts/artifacts/Peanuts-Stray-Standard-Beta2.apk
+            peanuts/artifacts/Peanuts-Stray-Standard-Beta3.apk
             peanuts/artifacts/SHA256SUMS.txt
           if-no-files-found: error
           retention-days: 14
